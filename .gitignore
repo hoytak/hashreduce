@@ -1,0 +1,10 @@
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.pyc
+*.o
+*~
+*.so
+.build
+Makefile
+install_manifest.txt

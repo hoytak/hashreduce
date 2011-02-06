@@ -1,0 +1,21 @@
+To compile or install, run "cmake ." followed by make or make install
+from the command line.
+
+To run the suite of unit tests, do the following:
+
+make
+cd tests
+python tests.py
+
+There may be several warnings printed; these are okay.  Note that
+python is required to run these tests.
+
+To compile the documentation, or for more information, visit
+http://www.stat.washington.edu/~hoytak/code/hashreduce.
+
+
+
+
+
+
+

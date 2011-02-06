@@ -1,0 +1,22 @@
+There are several coding conventions I use.
+
+
+Function Naming 
+========================================
+
+Functions operating on specific data structures all have a 2 or 3
+letter prefix denoting which structure they work with.  The following
+abreviations are currently in use:
+
+Hk:  Hash Keys.  Any function that operates on a HashKey, or any child
+     structure, begins with Hk.  First argument must point to a
+     hash key structure.
+
+Hkf: Hash Key Filling -- functions that fill the hash key fields with
+     a hash generated from a specific value.
+
+Ht:  Hash Table.
+
+Hti: Hash Table Iterator.
+
+
