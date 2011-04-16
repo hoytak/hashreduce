@@ -1,0 +1,18 @@
+include(CheckTypeSize)
+
+MACRO(CHECK_INT128 INT128_NAME VARIABLE DEFINE_NAME)
+
+  if(NOT INT128_FOUND)
+    message("Testing for 128 bit integer support with ${INT128_NAME}.")
+    check_type_size("${INT128_NAME}" "int128_t_${DEFINE_NAME}")
+    if("HAVE_int128_t_${DEFINE_NAME}")
+      if("int128_t_${DEFINE_NAME}" EQUAL 16)
+	message("Found: Enabling support for 128 bit integers using ${INT128_NAME}.")
+	SET(INT128_FOUND 1)
+	SET(${VARIABLE} "${DEFINE_NAME}")
+      else()
+	message("${INT128_NAME} has size ${int128_t}, can't use.")
+      endif()
+    endif()
+  endif()
+endmacro()

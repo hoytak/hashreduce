@@ -1,10 +1,9 @@
 /* An implementation of the Mersenne-Twister pseudo-random number
- * generator, with customizations specific for the current program.
- * The primary use case is for skip lists and other randomized data
- * structures.  Thus it doesn't need to be as flexible as other
- * implementations. 
+ * generator and an implementation of Knuth's LCG random number
+ * generator.  This one is good enough for the skip lists, which is
+ * what it is intended for.
  *
- * The code was adapted from the code covered by the following
+ * The MT code was adapted from the code covered by the following
  * license.  The main modification was to convert several of the
  * functions to inline functions and statically initialize the state
  * (the equivalent state if seeded with 0).  This provides enough
@@ -54,35 +53,33 @@
    email: matumoto@math.keio.ac.jp
 */
 
-#ifndef MTRANDBASIC_H
-#define MTRANDBASIC_H
+#ifndef _RANDBASIC_H
+#define _RANDBASIC_H
 
 #include "optimizations.h"
 #include <stdint.h>
+#include <stdlib.h>
 
 /* Period parameters */  
 #define __MTRAND_N 624
 
-extern unsigned long mt[__MTRAND_N];
-extern unsigned int mti; 
+typedef struct {
+    unsigned int mti;
+    unsigned long mt[__MTRAND_N];
+} MTRandState;
 
-void next_state(void);
+static inline MTRandState* Mtr_New(uint32_t seed);
+static inline uint32_t Mtr_Next(MTRandState*);
 
-static inline uint32_t genrand_uint32(void)
-{
-    unsigned long y;
+void _Mtr_next_state(MTRandState*);
 
-    if(unlikely(mti >= __MTRAND_N)) next_state();
-  
-    y = mt[mti++];
+typedef uint64_t LCGState;
+    
+/* Note that the state is returned by value.  This is for pure, brute
+ * speed. */
+static inline LCGState Lcg_New(uint32_t seed);
+static inline uint32_t Lcg_Next(LCGState* state);
 
-    /* Tempering */
-    y ^= (y >> 11);
-    y ^= (y << 7) & 0x9d2c5680UL;
-    y ^= (y << 15) & 0xefc60000UL;
-    y ^= (y >> 18);
-
-    return (uint32_t)y;
-}
+#include "randfunctions_inline.h"
 
 #endif

@@ -5,7 +5,7 @@ from common import *
 from random import shuffle
 from ctypes import *
 
-hk_prime_offset = dgl.Hk_GetPrimeOffset()
+hk_prime_offset = ibd.Hk_GetPrimeOffset()
 hk_prime = (2**128 - hk_prime_offset)
 
 import random as rn
@@ -69,17 +69,17 @@ class TestHashKeys(unittest.TestCase):
         self.assert_(makeHash(100, 'FromInt') == makeHash(100, 'FromUnsignedInt'))
 
     def testRefCounts(self):
-        hk = dgl.NewHashObject()
+        hk = ibd.NewHashObject()
         
-        self.assert_(dgl.O_RefCount(hk) == 1, 'refcount %d != 1' % dgl.O_RefCount(hk))
+        self.assert_(ibd.O_RefCount(hk) == 1, 'refcount %d != 1' % ibd.O_RefCount(hk))
 
-        dgl.O_IncRef(hk)
+        ibd.O_IncRef(hk)
 
-        self.assert_(dgl.O_RefCount(hk) == 2, 'refcount %d != 2' % dgl.O_RefCount(hk))
+        self.assert_(ibd.O_RefCount(hk) == 2, 'refcount %d != 2' % ibd.O_RefCount(hk))
 
-        dgl.O_DecRef(hk)
+        ibd.O_DecRef(hk)
 
-        self.assert_(dgl.O_RefCount(hk) == 1, 'refcount %d != 1' % dgl.O_RefCount(hk))
+        self.assert_(ibd.O_RefCount(hk) == 1, 'refcount %d != 1' % ibd.O_RefCount(hk))
 
     ############################################################
     # Hashes as numbers
@@ -115,11 +115,11 @@ class TestHashKeys(unittest.TestCase):
 
         n_true = (n1 + n2) % hk_prime
 
-        n_res_1 = hashKeyToNumber(dgl.H_Reduce(0, h1, h2))
+        n_res_1 = hashKeyToNumber(ibd.H_Reduce(0, h1, h2))
 
         self.assert_(n_res_1 == n_true, errMsg("1", n_res_1, n_true))
 
-        n_res_2 = hashKeyToNumber(dgl.H_Reduce(0, h2, h1))
+        n_res_2 = hashKeyToNumber(ibd.H_Reduce(0, h2, h1))
 
         self.assert_(n_res_2 == n_true, errMsg("1", n_res_1, n_true))
 
@@ -192,38 +192,38 @@ class TestHashKeys(unittest.TestCase):
         hk1 = makeHashKey(0)
         hk2 = makeHashKey(1)
 
-        self.assert_(not dgl.H_Equal(hk1, hk2))
+        self.assert_(not ibd.H_Equal(hk1, hk2))
 
-        hkn1 = dgl.H_Reduce(0, hk1, hk2)
-        hkn2 = dgl.H_Reduce(0, hk2, hk1)
+        hkn1 = ibd.H_Reduce(0, hk1, hk2)
+        hkn2 = ibd.H_Reduce(0, hk2, hk1)
         
-        self.assert_(dgl.H_Equal(hkn1, hkn2))
+        self.assert_(ibd.H_Equal(hkn1, hkn2))
 
     def testReduce_21_Multiple(self):
         hk1 = makeHashKey(0)
         hk2 = makeHashKey(1)
 
-        self.assert_(not dgl.H_Equal(hk1, hk2))
+        self.assert_(not ibd.H_Equal(hk1, hk2))
 
-        hkn1 = dgl.H_Reduce(0, hk1, hk2)
-        hkn2 = dgl.H_Reduce(0, hk1, hkn1)
+        hkn1 = ibd.H_Reduce(0, hk1, hk2)
+        hkn2 = ibd.H_Reduce(0, hk1, hkn1)
         
-        self.assert_(not dgl.H_Equal(hkn1, hkn2))
-        self.assert_(not dgl.H_Equal(hk1, hkn1))
-        self.assert_(not dgl.H_Equal(hk1, hkn2))
-        self.assert_(not dgl.H_Equal(hk2, hkn1))
-        self.assert_(not dgl.H_Equal(hk2, hkn2))
+        self.assert_(not ibd.H_Equal(hkn1, hkn2))
+        self.assert_(not ibd.H_Equal(hk1, hkn1))
+        self.assert_(not ibd.H_Equal(hk1, hkn2))
+        self.assert_(not ibd.H_Equal(hk2, hkn1))
+        self.assert_(not ibd.H_Equal(hk2, hkn2))
 
     def checkNegative(self, n):
         
         h = numberToHashKey(n)
-        nh = dgl.H_Negative(0, h)
+        nh = ibd.H_Negative(0, h)
 
         n_true = (hk_prime - n) % hk_prime
 
         n_res = hashKeyToNumber(nh)
 
-        rh = hashKeyToNumber(dgl.H_Reduce(0, nh, h))
+        rh = hashKeyToNumber(ibd.H_Reduce(0, nh, h))
 
         self.assert_(n_res == n_true, errMsg("1", n_res, n_true))
         self.assert_(rh == 0, errMsg("reduced_negative", rh, 0))
@@ -263,12 +263,12 @@ class TestHashKeys(unittest.TestCase):
 
     def testRehash_01(self):
         h = numberToHashKey(0)
-        h2 = dgl.H_Rehash(0, h)
+        h2 = ibd.H_Rehash(0, h)
         self.assert_(hashKeyToNumber(h2) == 0, "(true) 0 != %d (returned)" % (hashKeyToNumber(h2)))
 
     def testRehash_02(self):
         h = numberToHashKey(1)
-        h2 = dgl.H_Rehash(0,h)
+        h2 = ibd.H_Rehash(0,h)
         self.assert_(hashKeyToNumber(h) != hashKeyToNumber(h2))
         self.assert_(hashKeyToNumber(h) != 0)
 
@@ -277,10 +277,10 @@ class TestHashKeys(unittest.TestCase):
         def reduceHashes(*l):
 
             # First get it through the reduce function
-            rh = dgl.H_Reduce(0, l[0], l[1])
+            rh = ibd.H_Reduce(0, l[0], l[1])
             
             for h in l[2:]:
-                dgl.H_ReduceUpdate(rh, h)
+                ibd.H_ReduceUpdate(rh, h)
                 
             ret_n = hashKeyToNumber(rh)
 
@@ -293,7 +293,7 @@ class TestHashKeys(unittest.TestCase):
             return ret_n
 
         hl  = [makeHashKey(e) for e in l]
-        nhl = [dgl.H_Negative(0, h) for h in hl]
+        nhl = [ibd.H_Negative(0, h) for h in hl]
 
         for i in xrange(len(hl)):
 
@@ -321,36 +321,43 @@ class TestHashKeys(unittest.TestCase):
     ############################################################
     # Combine
 
+    def testEquality_01(self):
+        hk1 = makeHashKey(0)
+        hk2 = makeHashKey(1)
+        hk3 = makeHashKey(0)
+
+        self.assert_(not ibd.H_Equal(hk1, hk2))
+
     def testCombine(self):
         hk1 = makeHashKey(0)
         hk2 = makeHashKey(1)
 
-        self.assert_(not dgl.H_Equal(hk1, hk2))
+        self.assert_(not ibd.H_Equal(hk1, hk2))
 
-        hkn1 = dgl.Hf_Combine(0, hk1, hk2)
-        hkn2 = dgl.Hf_Combine(0, hk2, hk1)
+        hkn1 = ibd.Hf_Combine(0, hk1, hk2)
+        hkn2 = ibd.Hf_Combine(0, hk2, hk1)
         
-        self.assert_(not dgl.H_Equal(hkn1, hkn2))
-        self.assert_(not dgl.H_Equal(hk1, hkn1))
-        self.assert_(not dgl.H_Equal(hk1, hkn2))
-        self.assert_(not dgl.H_Equal(hk2, hkn1))
-        self.assert_(not dgl.H_Equal(hk2, hkn2))
+        self.assert_(not ibd.H_Equal(hkn1, hkn2))
+        self.assert_(not ibd.H_Equal(hk1, hkn1))
+        self.assert_(not ibd.H_Equal(hk1, hkn2))
+        self.assert_(not ibd.H_Equal(hk2, hkn1))
+        self.assert_(not ibd.H_Equal(hk2, hkn2))
         
     def testCombineMultiple(self):
         hk1 = makeHashKey(0)
         hk2 = makeHashKey(1)
         hk3 = makeHashKey(2)
 
-        self.assert_(not dgl.H_Equal(hk1, hk2))
+        self.assert_(not ibd.H_Equal(hk1, hk2))
 
-        hkn1 = dgl.Hf_Combine(0, hk1, hk2)
-        hkn2 = dgl.Hf_Combine(0, hk1, hk3)
+        hkn1 = ibd.Hf_Combine(0, hk1, hk2)
+        hkn2 = ibd.Hf_Combine(0, hk1, hk3)
         
-        self.assert_(not dgl.H_Equal(hkn1, hkn2))
-        self.assert_(not dgl.H_Equal(hk1, hkn1))
-        self.assert_(not dgl.H_Equal(hk1, hkn2))
-        self.assert_(not dgl.H_Equal(hk2, hkn1))
-        self.assert_(not dgl.H_Equal(hk2, hkn2))
+        self.assert_(not ibd.H_Equal(hkn1, hkn2))
+        self.assert_(not ibd.H_Equal(hk1, hkn1))
+        self.assert_(not ibd.H_Equal(hk1, hkn2))
+        self.assert_(not ibd.H_Equal(hk2, hkn1))
+        self.assert_(not ibd.H_Equal(hk2, hkn2))
 
 ####### Marker stuff
 
@@ -359,33 +366,33 @@ class TestHashKeys(unittest.TestCase):
 
         # All should be valid 
         
-        self.assert_(not dgl.H_IsMarked(hk1))
+        self.assert_(not ibd.H_IsMarked(hk1))
 
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, -1))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 0))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 5))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 10))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 15))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, -1))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 0))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 5))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 10))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 15))
 
-        dgl.H_AddMarkerValidRange(hk1, 0, 10)
+        ibd.H_AddMarkerValidRange(hk1, 0, 10)
 
-        self.assert_(dgl.H_IsMarked(hk1))
+        self.assert_(ibd.H_IsMarked(hk1))
         
-        self.assert_(not dgl.H_MarkerPointIsValid(hk1, -1))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 0))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 5))
-        self.assert_(not dgl.H_MarkerPointIsValid(hk1, 10))
-        self.assert_(not dgl.H_MarkerPointIsValid(hk1, 15))
+        self.assert_(not ibd.H_MarkerPointIsValid(hk1, -1))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 0))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 5))
+        self.assert_(not ibd.H_MarkerPointIsValid(hk1, 10))
+        self.assert_(not ibd.H_MarkerPointIsValid(hk1, 15))
         
-        dgl.H_ClearMarkerInfo(hk1)
+        ibd.H_ClearMarkerInfo(hk1)
 
-        self.assert_(not dgl.H_IsMarked(hk1))
+        self.assert_(not ibd.H_IsMarked(hk1))
 
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, -1))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 0))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 5))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 10))
-        self.assert_(dgl.H_MarkerPointIsValid(hk1, 15))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, -1))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 0))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 5))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 10))
+        self.assert_(ibd.H_MarkerPointIsValid(hk1, 15))
         
 if __name__ == '__main__':
     unittest.main()

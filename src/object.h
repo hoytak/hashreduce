@@ -72,10 +72,10 @@ typedef const void*   cobj_ptr;
  *  destroying the objects.
  */
 
-typedef void* (*unaryfunc)(void *);
-typedef void* (*binaryfunc)(void *, void *);
-typedef void (*nullunaryfunc)(void *);
-typedef void (*nullbinaryfunc)(void *, void *);
+typedef void* (*unaryobjectfunc)(void *);
+typedef void* (*binaryobjectfunc)(void *, void *);
+typedef void (*nullunaryobjectfunc)(void *);
+typedef void (*nullbinaryobjectfunc)(void *, void *);
 
 //typedef struct ObjectInfo ObjectInfo;
 
@@ -91,13 +91,13 @@ typedef struct ObjectInfo {
      * initialization. */
 
     /* If not NULL, called immediately after the object is created. */
-    nullunaryfunc construction_function;
+    nullunaryobjectfunc construction_function;
 
     /* If not NULL, called before the object is garbage collected. */
-    nullunaryfunc delete_function;
+    nullunaryobjectfunc delete_function;
 
     /* Called to turn arg 1 into a duplicate of the object in arg2. */
-    nullbinaryfunc duplicate_function;
+    nullbinaryobjectfunc duplicate_function;
    
     /*****************************************
      * Memory management operations. 
@@ -114,11 +114,23 @@ typedef struct ObjectInfo {
  *  information, and type information.
  *
  **********************************************************************/ 
+#ifndef NDEBUG
+
+#define _OBJECT_MAGIC_NUMBER           0x38d829efull
+#define _DECLARE_OBJECT_MAGIC_NUMBER   uint32_t _magic_number;
+#define _SET_OBJECT_MAGIC_NUMBER(obj)  (obj)->_magic_number = _OBJECT_MAGIC_NUMBER;
+#define _OBJECT_MAGIC_NUMBER_MATCHES(obj) ((obj)->_magic_number == _OBJECT_MAGIC_NUMBER)
+#else
+#define _DECLARE_OBJECT_MAGIC_NUMBER
+#define _SET_OBJECT_MAGIC_NUMBER(obj)  
+#define _OBJECT_MAGIC_NUMBER_MATCHES(obj) (true)
+#endif
 
 #define OBJECT_ITEMS							\
 									\
     /* Include memory pool items, as we use them here. */		\
     MEMORY_POOL_ITEMS;							\
+    _DECLARE_OBJECT_MAGIC_NUMBER					\
 									\
     /* Type information -- points to singleton type structure. */	\
     struct ObjectInfo *_obj_type_info;					\
@@ -140,6 +152,7 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
     {									\
 	ObjectType *obj = (ObjectType*)MP_ItemMalloc(&O_GlobalObjectInfoStruct(ObjectType).object_pool); \
 									\
+	_SET_OBJECT_MAGIC_NUMBER(obj);					\
 	obj->_obj_type_info = &O_GlobalObjectInfoStruct(ObjectType);	\
 	assert(obj->_obj_type_info != NULL);				\
 	obj->_obj_ref_count = 1;					\
@@ -168,7 +181,8 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 									\
 	    if(unlikely(h == NULL))					\
 		_Tc_##ObjectType##_NullErrorMessage(file, funcname, linenumber); \
-	    else if(unlikely(!O_IsType(ObjectType, h)))			\
+	    else if(unlikely((!_OBJECT_MAGIC_NUMBER_MATCHES(h))		\
+			     || !O_IsType(ObjectType, h)))		\
 		_Tc_##ObjectType##_CastErrorMessage(h, file, funcname, linenumber); \
 	}								\
     } 
@@ -192,9 +206,9 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
     ObjectInfo O_GlobalObjectInfoStruct(ObjectType) = {			\
 	/*  *type_name  */    #ObjectType,				\
 	/* Base Type */	      &O_GlobalObjectInfoStruct(BaseType),	\
-	/* constructor */     (nullunaryfunc)construction_function,	\
-        /* destructor */      (nullunaryfunc)delete_function,		\
-	/* duplicate */       (nullbinaryfunc)duplicate_function,       \
+	/* constructor */     (nullunaryobjectfunc)construction_function,	\
+        /* destructor */      (nullunaryobjectfunc)delete_function,		\
+	/* duplicate */       (nullbinaryobjectfunc)duplicate_function,       \
 									\
 	/* Memory management operations. */				\
 	STATIC_MEMORY_POOL_VALUES(sizeof(ObjectType))			\
@@ -211,7 +225,7 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
     }									\
 									\
     void _Tc_##ObjectType##_CastErrorMessage(				\
-	const Object *h, const char* file,					\
+	const Object *h, const char* file,				\
 	const char* funcname, unsigned long linenumber)			\
     {									\
 	fprintf(stderr, "\n\nERROR: Invalid upcast attempted from type "); \
@@ -224,7 +238,7 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 									\
 	fprintf(stderr, "\nLocation: %s, function %s, line %lu: ",	\
 		file, funcname, linenumber);				\
-	fprintf(stderr, "\n PROGRAM MAY BECOME UNSTABLE.");		\
+	abort();							\
     }									\
 									\
     ObjectType* Construct##ObjectType()					\
@@ -259,7 +273,7 @@ void O_IncRef(void *obj);
 void O_DecRef(void *obj);
 
 /* Get the current reference count of an object. */
-size_t O_RefCount(void *obj);
+size_t O_RefCount(const void *obj);
 
 /****************************************
  * Stuff to handle value-based object structures (usually a by-value
@@ -327,13 +341,21 @@ bool O_ObjectIsValue(void *obj);
 #define O_Cast(ObjectType, obj)					\
     (O_TypeCheck(ObjectType, (obj)), (ObjectType*)(obj))
 
-#define O_CastC(ObjectType, obj)					\
+#define O_CastPtr(ObjectType, obj)				\
+    (O_TypeCheck(ObjectType, (*(Object**)obj)), (ObjectType**)(obj))
+
+#define O_CastC(ObjectType, obj)				\
     (O_TypeCheck(ObjectType, (obj)), (const ObjectType*)(obj))
+
+#define O_CastCPtr(ObjectType, obj)					\
+    (O_TypeCheck(ObjectType, (*(Object**)obj)), (const ObjectType*)(obj))
 
 #else
 
-#define O_Cast(ObjectType, obj)	((ObjectType*)(obj))
-#define O_CastC(ObjectType, obj) ((const ObjectType*)(obj))
+#define O_Cast(ObjectType, obj)	        ((ObjectType*)(obj))
+#define O_CastPtr(ObjectType, obj)	((ObjectType**)(obj))
+#define O_CastC(ObjectType, obj)        ((const ObjectType*)(obj))
+#define O_CastCPtr(ObjectType, obj)     ((const ObjectType**)(obj))
 
 #endif
 

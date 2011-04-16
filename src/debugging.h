@@ -7,23 +7,21 @@
 #include <assert.h>
 #include <stdbool.h>
 
-
-
 #ifdef NDEBUG
 
 /* Do things that disable debugging stuff; some things we just rely on
  * the optimizer and use deterministic if statements; other places, we
  * actually use defines to change behavior. */
 #define IN_DEBUG_MODE 0
-#define RUN_CONSISTENCY_CHECKS 0  
+
+#warning "Compiling in release mode; type checking and other checks disabled."
 
 #else
 
-#ifdef NCONSISTENCY_CHECKS
-#define RUN_CONSISTENCY_CHECKS 0
-#else
-#define RUN_CONSISTENCY_CHECKS 1
+#ifdef ENABLE_CONSISTENCY_CHECKS
+#define RUN_CONSISTENCY_CHECKS
 #endif
+
 
 #define IN_DEBUG_MODE 1
 #define DEBUG_MODE
@@ -31,8 +29,6 @@
 #endif
 
 #ifdef DEBUG_MODE /* debug mode on. */
-
-#define SEGFAULT do{ int* _sflt = NULL; (*_sflt) = 0;} while(0)
 
 /* Define macros needed under debug mode. */
 #include "optimizations.h"
@@ -98,5 +94,17 @@
 #define debug_true(t) (true)
 
 #endif /* end debug mode off. */
+
+/* A few other things, like memory checking. */
+
+#define CHECK_MALLOC(x)							\
+    do{									\
+	if(unlikely((x) == NULL))					\
+	{								\
+	    fprintf(stderr, "Out of memory! (%s : %s : %d)",		\
+		    __FILE__, __func__, __LINE__);			\
+	    abort();							\
+	}								\
+    }while(0)
 
 #endif

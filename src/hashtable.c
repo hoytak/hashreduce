@@ -12,11 +12,14 @@
  **************************************************/
 
 #include "hashtable.h"
-#include "mtrandbasic.h"
+#include "randfunctions.h"
+#include "utilities.h"
+#include "types.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
+#include <math.h>
 
 /* Uncomment this line to run internal consistency checks on the hash
  * table structure for debugging purposes. */
@@ -28,189 +31,91 @@
  ************************************************************/
 
 /* Global memory pools for the small style hash table elements. */
-static MemoryPool common_ht_node_pool = 
-    STATIC_MEMORY_POOL_VALUES(sizeof(_HashTableNodeBlock));
+DEFINE_GLOBAL_MEMORY_POOL(_HT_Independent_Node);
+DEFINE_GLOBAL_MEMORY_POOL(_HT_MarkerSkipList);
+DEFINE_GLOBAL_MEMORY_POOL(_HT_MSL_Branch);
+DEFINE_GLOBAL_MEMORY_POOL(_HT_MSL_Leaf);
+DEFINE_GLOBAL_MEMORY_POOL(_HT_MSL_NodeStack);
 
-static MemoryPool ht_msl_pool =		
-    STATIC_MEMORY_POOL_VALUES(sizeof(_HT_MarkerSkipList));
-
-static MemoryPool common_ht_msl_branch_pool = 
-    STATIC_MEMORY_POOL_VALUES(sizeof(_HT_MSL_Branch));
-
-static MemoryPool common_ht_msl_leaf_pool = 
-    STATIC_MEMORY_POOL_VALUES(sizeof(_HT_MSL_Leaf));
-
-static MemoryPool ht_msl_node_stack_pool = 
-    STATIC_MEMORY_POOL_VALUES(sizeof(_HT_MSL_NodeStack));
-
-#define _HT_IS_LARGE(ht) O_IsExactType(LargeHashTable, (ht))
-
-#define _HT_NODE_POOL(ht)				\
-    ( _HT_IS_LARGE(ht)					\
-      ? (&( ((LargeHashTable*)(ht))->node_pool))	\
-      : (&common_ht_node_pool))
-
-#define _HT_MSL_BRANCH_POOL(ht)					\
-    ( _HT_IS_LARGE(ht)						\
-      ? (&( ((LargeHashTable*)(ht))->marker_branch_pool))	\
-      : (&common_ht_msl_branch_pool))
-
-static inline _HT_MSL_Branch* _HT_MSL_AsBranch(_HT_MSL_Node *n)
+static inline void _Ht_NonTable_Setup(HashTable *ht)
 {
-    assert(n == NULL || (n->is_branch && (!n->is_leaf)));
-    return (_HT_MSL_Branch*)n;
+    /* Nothing yet, as it's all cleared to zero. */
 }
 
-#define _HT_MSL_LEAF_POOL(ht)					\
-    ( _HT_IS_LARGE(ht)						\
-      ? (&( ((LargeHashTable*)(ht))->marker_leaf_pool))		\
-      : (&common_ht_msl_leaf_pool))
-
-static inline _HT_MSL_Leaf* _HT_MSL_AsLeaf(_HT_MSL_Node *n)
+static inline void _Ht_Table_Setup(HashTable *ht, unsigned int log2_size)
 {
-    assert(n == NULL || ((!n->is_branch) && n->is_leaf));
-    return (_HT_MSL_Leaf*)n;
-}
-
-#define _HT_FIRST_LEVEL_SIZE(ht)  (1 << ((ht)->num_first_levels *_HT_BITSIZE))
-
-static inline void __Ht_ConstructBasic(HashTable *ht, int num_levels)
-{
-    ht->num_first_levels = num_levels;
-
-    size_t node_size = _HT_FIRST_LEVEL_SIZE(ht);
-
-    ht->nodes = (_HashTableNode*)malloc(node_size*sizeof(_HashTableNode));
-    MEMCHECK(ht->nodes);
-    memset(ht->nodes, 0, node_size*sizeof(_HashTableNode));
+    ht->_table_log2_size = log2_size;
+    ht->_table_shift = 64 - log2_size;
+    ht->_table_size = (1 << (ht->_table_log2_size));
+    ht->_table_grow_trigger_size = (1 << (1 + ht->_table_log2_size));
+    ht->table = (_HT_Node*)malloc(sizeof(_HT_Node)*(ht->_table_size));
+    CHECK_MALLOC(ht->table);
+    memset(ht->table, 0, sizeof(_HT_Node)*(ht->_table_size));
 }
 
 void _Ht_HashTable_Constructor(HashTable *ht)
 {
     /* Just set it up for the first lavel */
-    __Ht_ConstructBasic(ht, 1);
-}
 
-void _Ht_LargeHashTable_Constructor(LargeHashTable *lht)
-{
-    __Ht_ConstructBasic((HashTable*)lht, 2);
-    
-    MP_Init(&lht->node_pool, sizeof(_HashTableNodeBlock));
-    MP_Init(&lht->marker_branch_pool, sizeof(_HT_MSL_Branch));
-    MP_Init(&lht->marker_leaf_pool, sizeof(_HT_MSL_Leaf));
-}
-
-HashTable* NewHashTable()
-{
-    return ConstructHashTable();
+    _Ht_Table_Setup(ht, _HT_INITIAL_LOG2_SIZE);
+    _Ht_NonTable_Setup(ht);
 }
 
 /* A specific constructor for custom constructions.*/
 HashTable* NewSizeOptimizedHashTable(size_t expected_size)
 {
-    if(expected_size <= 16*4)
-    {
-	HashTable* ht = ALLOCATEHashTable();
-	__Ht_ConstructBasic(ht, 1);
-	return ht;
-    }
-    else
-    {
-	LargeHashTable* lht = ALLOCATELargeHashTable();
+    size_t log2_size = (size_t)(floor(log2(expected_size)));
 
-	if(expected_size <= 16*16*4)
-	    __Ht_ConstructBasic((HashTable*)lht, 2);
-	else if(expected_size <= 16*16*16*4)
-	    __Ht_ConstructBasic((HashTable*)lht, 3);
-	else if(expected_size <= 16*16*16*16*4)
-	    __Ht_ConstructBasic((HashTable*)lht, 4);
-	else
-	    __Ht_ConstructBasic((HashTable*)lht, 5);
-	
-	MP_Init(&lht->node_pool, sizeof(_HashTableNodeBlock));
-	MP_Init(&lht->marker_branch_pool, sizeof(_HT_MSL_Branch));
-	MP_Init(&lht->marker_leaf_pool, sizeof(_HT_MSL_Leaf));
+    HashTable *ht = ALLOCATEHashTable();
 
-	return (HashTable*)lht;
-    }
+    _Ht_Table_Setup(ht, max(log2_size, _HT_INITIAL_LOG2_SIZE));
+    _Ht_NonTable_Setup(ht);
+
+    return ht;
 }
 
+HashTable* NewHashTable()
+{
+    return NewSizeOptimizedHashTable(1 << _HT_INITIAL_LOG2_SIZE);
+}
+
+#ifdef RUN_CONSISTENCY_CHECKS
+void _Ht_debug_HashTableConsistent(ht_crptr ht);
+#else
+inline void _Ht_debug_HashTableConsistent(ht_crptr ht) {}
+#endif
+
 /* Destructor method; called when the table is no longer needed. */
+static inline void _Ht_Table_DeallocateChain(_HT_Independent_Node *);
+void _Ht_MSL_Drop(HashTable *ht);
+
 void _Ht_Destroy(HashTable *ht)
 {
     /* First iterate over all the nodes and decref them. */
-    
-    HashTableIterator *hti = Hti_New(ht);
-    HashObject *hk;
 
-    while( (hk = Hti_Next(hti) ) != NULL)
+    _Ht_debug_HashTableConsistent(ht);
+
+    if(ht->marker_sl != NULL)
+	_Ht_MSL_Drop(ht);
+
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+    HashObject *h = NULL;
+
+    while(_Hti_NEXT(&h, &hti))
     {
-	H_RELEASE_LOCK(hk);
-	O_DECREF(hk);
+	assert(O_RefCount(h) >= 1);
+	O_DECREF(h);
     }
     
-    Hti_Delete(hti);
-    
-    /* Get rid of the first level */
-    free(ht->nodes);
+    /* See if any of the nodes need deleting. */
+    size_t i;
+    for(i= 0; i < ht->_table_size; ++i)
+	if(unlikely(ht->table[i].next_chain != NULL))
+	    _Ht_Table_DeallocateChain(ht->table[i].next_chain);
 
-    /* Clear the marker skip list. */
-    if(_HT_IS_LARGE(ht))
-    {
-	LargeHashTable *lht = (LargeHashTable*)ht;
-	
-	MP_Clear(&lht->node_pool);
-	MP_Clear(&lht->marker_branch_pool);
-	MP_Clear(&lht->marker_leaf_pool);
+    free(ht->table);
 
-	if(ht->marker_sl != NULL)
-	    MP_ItemFree(&ht_msl_pool, ht->marker_sl);
-    }
-    else if(ht->marker_sl != NULL)
-    {
-	
-	/* Walk all the structures releasing them back to the common
-	 * memory pools. */
-	
-	_HT_MarkerSkipList *msl = ht->marker_sl;
-
-	if(ht->marker_sl != NULL)
-	{
-
-	    /* Clear all the branches. */
-
-	    for(;msl->start_node_level != 0; --msl->start_node_level) 
-	    {
-		assert(msl->start_node != NULL);
-
-		_HT_MSL_Node *br = (_HT_MSL_Node*)(msl->start_node);
-
-		do{
-		    _HT_MSL_Node *old_br = br;
-		    br = br->next;
-		    		
-		    MP_ItemFree(&common_ht_msl_branch_pool, old_br);
-		}while(br != NULL);
-		    
-		msl->start_node = (_HT_MSL_Branch*) msl->start_node->down;
-	    }
- 
-	    /* Now clear all the nodes. */
-
-	    assert(msl->first_leaf != NULL);
-
-	    _HT_MSL_Leaf *leaf = msl->first_leaf;
-	    
-	    do{
-		_HT_MSL_Leaf *old_leaf = leaf;
-		leaf = (_HT_MSL_Leaf*)leaf->next;
-		MP_ItemFree(&common_ht_msl_leaf_pool, old_leaf);
-	    }while(leaf != NULL);
-
-	    /* Finally clear the msl itself. */
-	    MP_ItemFree(&ht_msl_pool, ht->marker_sl);
-	}
-    }
 }
 
 DEFINE_OBJECT(
@@ -220,40 +125,488 @@ DEFINE_OBJECT(
     /* delete */    _Ht_Destroy,
     /* Duplicate */ NULL);
 
-DEFINE_OBJECT(
-    /* Name. */     LargeHashTable,
-    /* BaseType */  HashTable,
-    /* construct */ _Ht_LargeHashTable_Constructor,
-    /* delete */    _Ht_Destroy,
-    /* Duplicate */ NULL);
-
 /************************************************************
  * Functions for managing internal aspects of the hash table,
  * excluding individual operations on the nodes.
  ************************************************************/
 
-/* Node Blocks */
-static inline _HashTableNodeBlock* _Ht_newNodeBlock(HashTable* ht)
+static inline size_t _Ht_Table_Index(ht_crptr ht, uint64_t hk64)
 {
-    _HashTableNodeBlock* hnb = (_HashTableNodeBlock*)MP_ItemMalloc(_HT_NODE_POOL(ht));
+    size_t idx = (size_t)(hk64 >> (ht->_table_shift));
+
+    /* fprintf(stderr, "Size of table = %ld, shift = %d, new idx = %ld \n",  */
+    /* 	   ht->_table_size, ht->_table_shift, idx); */
+
+    assert(idx < ht->_table_size);
+    return idx;
+}
+
+static inline _HT_Item _Ht_Table_MakeItem(HashObject *h)
+{
+    _HT_Item hi;
+    hi.hk64 = H_Hash_RO(h)->hk64[HK64I(0)];
+    hi.obj = h;
+    return hi;
+}
+
+/* Have to go through more gymnastics on this front to prevent
+ * corruption of the marker skip list when the same key is inserted
+ * twice. */
+
+typedef struct {
+    HashObject *h;
+    HashObject *replaced;
+    bool was_inserted;
+} _HT_Table_Insert_Return;
+
+static inline void _Ht_Table_AppendUnique(_ht_node_rptr node, const _HT_Item hi)
+{
+    /* printf("\nInserting >>> "); */
+    /* H_debug_print(hi.obj); */
+
+    while(unlikely(node->size == 4))
+    {
+	assert(node->items[3].hk64 <= hi.hk64);
+
+	if(node->next_chain == NULL)
+	{
+	    node->next_chain = Mp_New_HT_Independent_Node();
+	    node->next_chain->node.size = 1;
+	    node->next_chain->node.items[0] = hi;
+	    return;
+	}
+
+	node = &(node->next_chain->node);
+    }
+
+    assert(node->size < 4);
+
+    if(node->size != 0)
+    {
+#ifndef NDEBUG
+	if(Hk_GEQ(H_Hash_RO(node->items[node->size - 1].obj), H_Hash_RO(hi.obj)))
+	    fprintf(stderr, "Error in item ordering; object \n%llx >= \n%llx\n", 
+		    H_Hash_RO(node->items[node->size - 1].obj)->hk64[HK64I(0)], 
+		    H_Hash_RO(hi.obj)->hk64[HK64I(0)]);
+#endif
+
+	assert(Hk_LT(H_Hash_RO(node->items[node->size - 1].obj), H_Hash_RO(hi.obj)));
+    }
+
+    node->items[node->size] = hi;
+    ++(node->size);
+}
+
+_HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
+    _ht_node_rptr node, const _HT_Item hi, const bool overwrite);
+
+/* Returns true on success, otherwise, _HT_Item* hi gets punted to next one. */
+static inline _HT_Table_Insert_Return _Ht_Table_InsertIntoNode(
+    _ht_node_rptr node, const _HT_Item hi, 
+    const bool overwrite)
+{
+    assert(node->size <= _HT_ITEMS_PER_NODE);
+
+    _HT_Table_Insert_Return ret;
+    ret.h = hi.obj;
+    ret.replaced = NULL;
+    ret.was_inserted = true;
+
+    /* Get the right location in the node list. */ 
+    if(node->size == 0)
+    {
+	++node->size;
+	node->items[0] = hi;
+	return ret;
+    }
+
+    unsigned int insert_pos = 0;
+
+    switch(node->size)
+    {
+    case 4:
+	if(unlikely(node->items[3].hk64 < hi.hk64))
+	{
+	    return _Ht_Table_InsertIntoOverflowNode(node, hi, overwrite);
+	}
+    case 3:
+	if(node->items[2].hk64 < hi.hk64)
+	{
+	    insert_pos = 3;
+	    break;
+	}
+    case 2:
+	if(node->items[1].hk64 < hi.hk64)
+	{
+	    insert_pos = 2;
+	    break;
+	}
+    case 1:
+	if(node->items[0].hk64 < hi.hk64)
+	{
+	    insert_pos = 1;
+	    break;
+	}
+    default:;
+    }
+
+    /* Now see if it's replacing one or the 64bit hash version conflicts. */
+    if(unlikely(hi.hk64 == node->items[insert_pos].hk64))
+    {
+	if(likely(H_EQUAL(hi.obj, node->items[insert_pos].obj)))
+	{
+	    if(overwrite)
+	    {
+		ret.replaced = node->items[insert_pos].obj;
+		node->items[insert_pos] = hi;
+		ret.was_inserted = true;
+		return ret;
+	    }
+	    else
+	    {
+		ret.h = node->items[insert_pos].obj;
+		ret.was_inserted = false;
+		return ret;
+	    }
+	}
+	else 
+	{
+	    /* A definite corner case; occurs naturally with probability ~ 2^-64 */
+	    assert(!H_Equal(hi.obj, node->items[insert_pos].obj));
+
+	    for(;insert_pos != node->size 
+		    && Hk_LT(H_Hash_RO(node->items[insert_pos].obj), H_Hash_RO(hi.obj));
+		++insert_pos);
+
+	    /* Did we run off the end?  If so, punt this one to the next node. */
+	    if(insert_pos == node->size)
+	    {
+		if(node->size == _HT_ITEMS_PER_NODE)
+		    return _Ht_Table_InsertIntoOverflowNode(node, hi, overwrite);
+	    }
+
+	    /* Deal with the case where it's equal; deal locally with
+	     * this node, and we're done */
+	    if(H_EQUAL(hi.obj, node->items[insert_pos].obj))
+	    {
+		if(overwrite)
+		{
+		    ret.replaced = node->items[insert_pos].obj;
+		    node->items[insert_pos] = hi;
+		    ret.was_inserted = true;
+		    return ret;
+		}
+		else
+		{
+		    ret.h = node->items[insert_pos].obj;
+		    ret.was_inserted = false;
+		    return ret;
+		}
+	    }
+	}
+    }
+
+    if(unlikely(node->size == _HT_ITEMS_PER_NODE))
+	_Ht_Table_InsertIntoOverflowNode(node, node->items[3], overwrite);
+    else
+	++node->size;
+
+    unsigned int copy_dest;
+    
+    for(copy_dest = node->size - 1; copy_dest != insert_pos; --copy_dest)
+	node->items[copy_dest] = node->items[copy_dest - 1];
+	
+    node->items[insert_pos] = hi;
+
+    if(insert_pos != 0)
+	assert(Hk_LT(H_Hash_RO(node->items[insert_pos-1].obj), 
+		     H_Hash_RO(node->items[insert_pos].obj)));
+
+    if(insert_pos + 1 != node->size)
+	assert(Hk_LT(H_Hash_RO(node->items[insert_pos].obj), 
+		     H_Hash_RO(node->items[insert_pos+1].obj)));
+
+    assert(node->size <= _HT_ITEMS_PER_NODE);
+
+    return ret;
+}
+
+_HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
+    _ht_node_rptr node, const _HT_Item hi, const bool overwrite)
+{
+    if(node->next_chain == NULL)
+	node->next_chain = Mp_New_HT_Independent_Node();
+	    
+    return _Ht_Table_InsertIntoNode(&(node->next_chain->node), hi, overwrite);
+}
+
+void _Ht_Table_Grow(HashTable *ht);
+
+static inline void _Ht_Table_GrowIfNeeded(HashTable *ht)
+{
+    if(unlikely(ht->size >= ht->_table_grow_trigger_size))
+	_Ht_Table_Grow(ht);
+}
+
+static inline _HT_Table_Insert_Return _Ht_Table_Insert(HashTable *ht, HashObject *h, bool overwrite)
+{
+    _Ht_Table_GrowIfNeeded(ht);
+
+    _HT_Item hi = _Ht_Table_MakeItem(h);
+    size_t idx = _Ht_Table_Index(ht, hi.hk64);
+
+    return _Ht_Table_InsertIntoNode(&(ht->table[idx]), hi, overwrite);
+}
+
+void _Ht_Table_Grow(HashTable *ht)
+{
+    _HT_Node* _restrict_ src_table = ht->table;
+    const size_t src_size = ht->_table_size;
+
+    _Ht_Table_Setup(ht, ht->_table_log2_size + 1);
 
     size_t i;
-    
-    for(i = 0; i < _HT_LEVEL_SIZE; ++i)
-	assert(hnb->nodes[i].count == 0);
+    unsigned int j;
 
-    return hnb;
+    for(i = 0; i < src_size; ++i)
+    {
+	assert(src_table[i].size <= _HT_ITEMS_PER_NODE);
+	
+	for(j = 0; j < src_table[i].size; ++j)
+	{
+	    _HT_Item hi = src_table[i].items[j];
+	    size_t idx = _Ht_Table_Index(ht, hi.hk64);
+	    assert(idx < ht->_table_size);
+
+	    _Ht_Table_AppendUnique(&(ht->table[idx]), hi);
+	}
+
+	if(unlikely(src_table[i].next_chain != NULL))
+	{
+	    _HT_Independent_Node *inode = src_table[i].next_chain;
+	    
+	    do{
+		for(j = 0; j < inode->node.size; ++j)
+		{
+		    _HT_Item hi = inode->node.items[j];
+		    size_t idx = _Ht_Table_Index(ht, hi.hk64);
+		    _Ht_Table_AppendUnique(&(ht->table[idx]), hi);
+		}
+
+		inode = inode->node.next_chain;
+	    }while(unlikely(inode != NULL));
+
+	    _Ht_Table_DeallocateChain(src_table[i].next_chain);
+	}
+    }
+
+    free(src_table);
+
+    _Ht_debug_HashTableConsistent(ht);
 }
 
-static inline void _Ht_freeNodeBlock(HashTable *ht, _HashTableNodeBlock* hnb)
+
+void _Ht_Table_DeallocateChain(_HT_Independent_Node * _restrict_ inode)
 {
-    MP_ItemFree(_HT_NODE_POOL(ht), hnb);
+    assert(inode != NULL);
+
+    do{
+	_HT_Independent_Node *next_node = inode->node.next_chain;
+	Mp_Free_HT_Independent_Node(inode);
+	inode = next_node;
+    }while(unlikely(inode != NULL));
 }
 
-/* Marker Branch Items */
+/* Now look at simply finding items. */
+static inline bool _Ht_Table_Find(
+    _ht_node_rptr *target_node, unsigned int *node_idx, 
+    _ht_node_rptr *base_node,    HashObject **target_h, 
+    const HashTable *ht, const HashKey hk)
+{
+    size_t idx = _Ht_Table_Index(ht, hk.hk64[HK64I(0)]);
+
+    assert(idx < ht->_table_size);
+    
+    _ht_node_rptr node = &(ht->table[idx]);
+
+    *base_node = NULL;
+    *target_h = NULL;
+
+    uint64_t hk64 = hk.hk64[HK64I(0)];
+
+HT_TABLE_FIND_RESTART:;
+
+    unsigned int pos = 4;
+
+    switch(node->size)
+    {
+    case 4:
+	if(unlikely(node->items[3].hk64 < hk64))
+	{
+	    if(node->next_chain != NULL)
+	    {
+		*base_node = node;
+		node = &(node->next_chain->node);
+		goto HT_TABLE_FIND_RESTART;
+	    }
+	    else
+		return false;
+	}
+	if(node->items[3].hk64 == hk64)
+	{
+	    pos = 3;
+	    break;
+	}
+    case 3:
+	if(node->items[2].hk64 == hk64)
+	{
+	    pos = 2;
+	    break;
+	}
+    case 2:
+	if(node->items[1].hk64 == hk64)
+	{
+	    pos = 1;
+	    break;
+	}
+    case 1:
+	if(node->items[0].hk64 == hk64)
+	{
+	    pos = 0;
+	    break;
+	}
+    default:
+	/* None of the conditions have caught it; so it's not in this
+	 * table. */
+	   
+	return false;
+    }
+
+    /* Now get to test if things are really equal. */
+    if(likely(Hk_EQUAL(H_Hash_RO(node->items[pos].obj), &hk)))
+    {
+	*target_node = node;
+	*target_h = node->items[pos].obj;
+	*node_idx = pos;
+	return true;
+    }
+    else
+    {
+	/* First make sure it's not in any of the other equal nodes. */
+	unsigned int s_pos = pos;
+
+	while(s_pos && node->items[--s_pos].hk64 == hk64)
+	{
+	    if(likely(Hk_EQUAL(H_Hash_RO(node->items[s_pos].obj), &hk)))
+	    {
+		*target_node = node;
+		*target_h = node->items[s_pos].obj;
+		*node_idx = s_pos;
+		return true;
+	    }
+	}
+
+	if(unlikely(pos == 3))
+	{
+	    /* It may be in the next level. */
+	    if(node->next_chain != NULL)
+	    {
+		*base_node = node;
+		node = &(node->next_chain->node);
+		goto HT_TABLE_FIND_RESTART;
+	    }
+	}
+
+	return false;
+    }
+}
+
+void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node);
+
+/* Returns true if the node is now empty, otherwise false. */
+static inline bool _Ht_Table_ClearFromNode(_ht_node_rptr node, unsigned int idx)
+{
+    assert(node->size <= 4);
+    assert(node->size >= 1);
+    assert(idx < node->size);
+    
+    unsigned int i;
+    for(i = idx; i + 1 < node->size; ++i)
+	node->items[i] = node->items[i+1];
+
+    if(unlikely(node->next_chain != NULL))
+    {
+	_Ht_Table_SlideFromChainedNode(node);
+	return false;
+    }
+    else
+    {
+	assert(node->size != 0);
+	--node->size;
+	node->items[node->size].hk64 = 0;
+	node->items[node->size].obj = NULL;
+	return (node->size == 0);
+    }
+}
+
+void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node)
+{
+    assert(node->size == 4);
+    assert(node->next_chain != NULL);
+    assert(node->next_chain->node.size >= 1);
+
+    node->items[3] = node->next_chain->node.items[0];
+
+    if(_Ht_Table_ClearFromNode(&(node->next_chain->node), 0))
+    {
+	Mp_Free_HT_Independent_Node(node->next_chain);
+	node->next_chain = NULL;
+    }
+}
+
+static inline void _Ht_Table_Delete(_ht_node_rptr node, 
+				    _ht_node_rptr base_node,
+				    unsigned int idx, HashObject *h)
+{
+    if(_Ht_Table_ClearFromNode(node, idx) && unlikely(base_node != NULL))
+    {
+	assert(base_node->next_chain != NULL);
+	assert(node == &(base_node->next_chain->node));
+
+	Mp_Free_HT_Independent_Node(base_node->next_chain);
+	base_node->next_chain = NULL;
+    }
+}
+
+/********************************************************************************
+ *
+ *  Now interface with the marker branch.  Since this slows things
+ *  down, only create it when needed. 
+ *
+ ********************************************************************************/
+
+
+/****************************************
+ *
+ * Node stack operations for easily moving on the skip list
+ *
+ ****************************************/
+
+static inline _HT_MSL_Branch* _HT_MSL_AsBranch(_HT_MSL_Node *n)
+{
+    assert(n == NULL || (n->is_branch && (!n->is_leaf)));
+    return (_HT_MSL_Branch*)n;
+}
+
+static inline _HT_MSL_Leaf* _HT_MSL_AsLeaf(_HT_MSL_Node *n)
+{
+    assert(n == NULL || ((!n->is_branch) && n->is_leaf));
+    return (_HT_MSL_Leaf*)n;
+}
+
 static inline _HT_MSL_Branch* _Ht_newMarkerBranch(HashTable* ht)
 {
-    _HT_MSL_Branch *br = (_HT_MSL_Branch*)MP_ItemMalloc(_HT_MSL_BRANCH_POOL(ht));
+    _HT_MSL_Branch *br = Mp_New_HT_MSL_Branch();
 #ifdef DEBUG_MODE
     br->is_branch = true;
     br->is_leaf = false;
@@ -263,13 +616,14 @@ static inline _HT_MSL_Branch* _Ht_newMarkerBranch(HashTable* ht)
 
 static inline void _Ht_freeMarkerBranch(HashTable *ht, _HT_MSL_Node* mb)
 {
-    MP_ItemFree(_HT_MSL_BRANCH_POOL(ht), mb);
+    Mp_Free_HT_MSL_Branch(_HT_MSL_AsBranch(mb));
 }
 
 /* Marker Leaf Items */
 static inline _HT_MSL_Leaf* _Ht_newMarkerLeaf(HashTable* ht)
 {
-    _HT_MSL_Leaf *leaf = (_HT_MSL_Leaf*)MP_ItemMalloc(_HT_MSL_LEAF_POOL(ht));
+    _HT_MSL_Leaf *leaf = Mp_New_HT_MSL_Leaf();
+
 #ifdef DEBUG_MODE
     leaf->is_branch = false;
     leaf->is_leaf = true;
@@ -279,9 +633,8 @@ static inline _HT_MSL_Leaf* _Ht_newMarkerLeaf(HashTable* ht)
 
 static inline void _Ht_freeMarkerLeaf(HashTable *ht, _HT_MSL_Leaf* mb)
 {
-    MP_ItemFree(_HT_MSL_LEAF_POOL(ht), mb);
+    Mp_Free_HT_MSL_Leaf(mb);
 }
-
 
 /************************************************************
  *
@@ -293,925 +646,6 @@ static inline bool _Ht_HasMarkedItems(HashTable *ht)
 {
     return (ht->marker_sl != NULL);
 }
-
-
-/*************************************************************
- *
- * Functions for retriving nodes in the hash table.
- *
- ************************************************************/
-
-static inline void _Hn_overwriteKeyInNode(_HashTableNode* hn, HashObject* restrict old_hk, 
-					  HashObject* restrict new_hk)
-{
-    O_DECREF(old_hk);
-    O_INCREF(new_hk);
-    hn->next = (void*)new_hk;
-}
-
-static inline int _H_extractOffset(HashObject* hk, size_t level)
-{
-    int bitshift, local_bitshift, component;
-
-    bitshift = level * _HT_BITSIZE;
-    
-    if(H_64BIT)
-    {
-	component = (bitshift >> 6);              /* bitshift / 64 */
-	local_bitshift = (bitshift & 0x0000003f); /* bitshift % 64 */ 
-    }
-    else
-    {
-	component = (bitshift >> 5);   /* bitshift / 32 */
-	local_bitshift = (bitshift & 0x0000001f); /* bitshift % 32 */ 
-    }
-    
-    return ((H_Hash_RO(hk)->hk[component]) >> local_bitshift) & _HT_BITMASK;
-}
-
-/*****************************************
- * Optimizations for optimizing iterators.
- ****************************************/
-
-#define HNBO_COUNT_BIT        0
-#define HNBO_COUNT_SIZE       5
-
-#define HNBO_FIRST_NODE_BIT   5
-#define HNBO_FIRST_NODE_SIZE  4
-
-#define HNBO_NODEMASK_BIT    16
-
-#define _HNBO_localCount(hn) (getBitGroup((hn)->node_data, HNBO_COUNT_BIT, HNBO_COUNT_SIZE))
-#define _HNBO_nextNode(hn, cur_node) (getFirstBitOnFromPos((hn)->node_data, (cur_node) + HNBO_NODEMASK_BIT) - HNBO_NODEMASK_BIT)
-#define _HNBO_firstOffset(hn)  (getBitGroup((hn)->node_data, HNBO_FIRST_NODE_BIT, HNBO_FIRST_NODE_SIZE) )
-#define _HNBO_nodeOn(hn, offset) (bitOn((hn)->node_data, (offset) + HNBO_NODEMASK_BIT))
-
-static inline void _HNBO_setNodeOn(_HashTableNode *hn, int offset)
-{
-    /* The structure is packed so that:
-     *
-     * Bits 0-4 give the current number of nodees.
-     *
-     * Bits 5-8 give the index of the first nonzero entry in the
-     * node table.
-     *
-     * Bits 16-31 give a bitmask representation of which nodes have
-     * nodees and which do not.
-     * 
-     */
-
-    assert(offset < 16);
-
-    if(!_HNBO_nodeOn(hn, offset))
-    {
-	assert(_HNBO_localCount(hn) < 16);
-	
-	bool is_new_node = (_HNBO_localCount(hn) == 0);
-	   
-	++hn->node_data;
-	
-	if(is_new_node || _HNBO_firstOffset(hn) > offset)
-	    setBitGroup(hn->node_data, HNBO_FIRST_NODE_BIT, HNBO_FIRST_NODE_SIZE, offset);
-	
-	setBitOn(hn->node_data, offset + HNBO_NODEMASK_BIT);
-    }
-}
-
-void _HNBO_printOffset(_HashTableNode *hn)
-{    
-    printf("local_count=%lu, firstOffset=%lu, mask=", _HNBO_localCount(hn), _HNBO_firstOffset(hn));
-
-    int j;
-
-    for(j = 0; j < 16; ++j)
-    {
-	if(_HNBO_nodeOn(hn, j))
-	    printf("%x,", j);
-    }
-    
-    printf("\n");
-}
-
-
-static inline void _HNBO_delNode(_HashTableNode *hn, size_t offset)
-{
-    assert(_HNBO_nodeOn(hn, offset));
-    assert(_HNBO_localCount(hn) >= 1);
-    
-    setBitOff(hn->node_data, offset + HNBO_NODEMASK_BIT);
-    
-    --hn->node_data;
-    
-    /* See if we need to reset the first node index. */
-    if(_HNBO_firstOffset(hn) == offset )
-	setBitGroup(hn->node_data, HNBO_FIRST_NODE_BIT, HNBO_FIRST_NODE_SIZE, 
-		    getFirstBitOnFromPos(hn->node_data, offset + 1 + HNBO_NODEMASK_BIT));
-}
-
-/****************************************
- * The main routine for retrieving and setting items in the hash tree.
- ****************************************/
-
-void _Ht_MSL_Init(HashTable *ht);
-void _Ht_MSL_WriteKey_Marked(HashTable *ht, HashObject *h, bool);
-void _Ht_MSL_WriteKey_Unmarked(HashTable *ht, HashObject *h);
-void _Ht_MSL_DeleteKey_Marked(HashTable *ht, HashObject *h);
-void _Ht_MSL_DeleteKey_Unmarked(HashTable *ht, HashObject *h);
-
-inline void _Ht_debug_HashTableConsistent(HashTable *ht)
-{
-#if (RUN_CONSISTENCY_CHECKS == 1)
-    
-#warning "Running internal consistency checks; some processes may be slow." 
-
-    HashTableIterator *hti = Hti_New(ht);
-    
-    HashObject *h;
-
-    while( (h = Hti_Next(hti)) != NULL)
-    {
-	assert(O_IsType(HashObject, h));
-	assert(O_REF_COUNT(h) >= 1);
-	assert(H_LOCK_COUNT(h) >= 1);
-    }
-    
-    Hti_Delete(hti);
-
-    // Now step through to make sure things are working 
-    _HT_MarkerSkipList *msl = ht->marker_sl;
-
-    if(msl != NULL)
-    {
-
-	/* Now just walk through the marker list, adding the hash between
-	 * each subsequent node. */
-
-	HashObject *temp_h = ALLOCATEHashObject();
-	HashObject *running_h = ALLOCATEHashObject();
-	Hf_COPY_FROM_KEY(running_h, &msl->unmarked_object_hash);
-
-	_HT_MSL_Node *next_leaf;
-	_HT_MSL_Node *cur_leaf = (_HT_MSL_Node *)msl->first_leaf;
-
-	markertype cur_m, next_m;
-
-	do{
-	    cur_m = cur_leaf->marker;
-	    Hk_REDUCE_UPDATE(H_Hash_RW(running_h), &(cur_leaf->hk));
-
-	    if(!H_Equal(Ht_HashAtMarkerPoint(temp_h, ht, cur_m), running_h))
-	    {
-		fprintf(stderr, "\n\n##############\nMarker point = %ld", cur_m);
-		Ht_debug_print(ht);
-		Ht_MSL_debug_Print(ht);
-		abort();
-	    }
-
-	    next_leaf = cur_leaf->next;
-
-	    if(next_leaf == NULL)
-		next_m = MARKER_PLUS_INFTY;
-	    else
-		next_m = next_leaf->marker;
-
-	    cur_leaf = next_leaf;
-
-	}while(cur_leaf != NULL);
-
-	O_DECREF(running_h);
-    }
-#endif
-}
-
-
-/**** needed routines that interface with the hash object stuff. ****/
-
-static inline void _Ht_MSL_InitIfNeeded(HashTable *ht, HashObject *h)
-{
-    if(unlikely(ht->marker_sl == NULL && H_IS_MARKED(h)))
-	_Ht_MSL_Init(ht);
-}
-
-static inline void _Ht_MSL_WriteKey(HashTable *ht, HashObject *h)
-{
-    if(H_IS_MARKED(h))
-	_Ht_MSL_WriteKey_Marked(ht, h, false);
-    else
-	_Ht_MSL_WriteKey_Unmarked(ht, h);
-}
-
-static inline void _Ht_MSL_DeleteKey(HashTable *ht, HashObject *h)
-{
-    if(H_IS_MARKED(h))
-	_Ht_MSL_DeleteKey_Marked(ht, h);
-    else
-	_Ht_MSL_DeleteKey_Unmarked(ht, h);
-}
-
-/**** Main function that does the heavy lifting in the hash key itself. ****/
-
-#define _HT_GET            0
-#define _HT_WRITE          1
-#define _HT_WRITE_PASSIVE  2
-#define _HT_POP            3
-
-#define _HN_NextNode(cur_node, offset) (&(((_HashTableNodeBlock*)( (cur_node)->next))->nodes[offset]))
-#define _HN_HashObject(cur_node)  ( (HashObject*)( (cur_node)->next) )
-
-static inline HashObject* _Ht_getItem(HashTable* ht, HashObject* hk, const int mode, bool interact_with_msl)
-{
-    _HashTableNode *cur_hn, *hn_stack[_HT_NUMLEVELS + 1];
-    _HashTableNode *last_hn = NULL;
-    unsigned int register stack_top;
-    /*MarkerRange range_stack[_HT_NUMLEVELS];*/
-
-    /* All the stuff to keep track of the hashes. */
-    hashfieldtype hash_buffer;
-    int offset_to_current = -1, offset_to_next = -1, bits_left_in_hash_buffer, current_key_in_hash_buffer=0;
-    
-    assert(O_IsType(HashObject, hk));
-    assert(O_IsType(HashTable, ht));
-
-    /* Init the hash buffer stuff */
-    hash_buffer = H_Hash_RO(hk)->hk[0];
-    bits_left_in_hash_buffer = sizeof(hashfieldtype)*8;
-
-    /* Get the first node in the dataset. */
-    assert(ht->num_first_levels < (H_COMPONENT_SIZE / _HT_BITSIZE));
-
-    stack_top = 0;
-    hn_stack[stack_top] = cur_hn = &(ht->nodes[getBitGroup(hash_buffer, 0, ht->num_first_levels*_HT_BITSIZE)]);
-
-    /* Advance the hash */
-    bits_left_in_hash_buffer -= ht->num_first_levels*_HT_BITSIZE;
-    hash_buffer >>= ht->num_first_levels*_HT_BITSIZE;
-    offset_to_next = hash_buffer & _HT_BITMASK;
-    hash_buffer >>= _HT_BITSIZE;
-    bits_left_in_hash_buffer -= _HT_BITSIZE;
-
-
-/***************************************************
- * Now for readability, define a few macros. 
- ***************************************************/
-
-/* First, dealing with the offsets and such. */
-
-#define ReplenishHashBuffer()						\
-    do{									\
-	assert(hash_buffer == 0);					\
-	++current_key_in_hash_buffer;					\
-	hash_buffer = H_Hash_RO(hk)->hk[current_key_in_hash_buffer];	\
-									\
-	bits_left_in_hash_buffer = sizeof(hashfieldtype)*8;		\
-	assert(bits_left_in_hash_buffer == 32				\
-	       || bits_left_in_hash_buffer == 64);			\
-    }while(0)
-
-#define __HnAlterNodeCount(_n, delta)					\
-    do{									\
-	_HashTableNode *n = (_n);					\
-	n->count += delta;						\
-    }while(0)
-
-#define __HnStackPush(push_n, record_stack)				\
-    do{									\
-	__HnCountSanityCheck();						\
-	_HashTableNode *__hsp_n = (push_n);				\
-									\
-	/* Checks */							\
-	if(record_stack)						\
-	{								\
-	    assert(stack_top <= _HT_NUMLEVELS);				\
-	    assert(hn_stack[stack_top] == cur_hn);			\
-	    assert(hn_stack[stack_top] != NULL);			\
-									\
-	    ++stack_top;						\
-	    last_hn = cur_hn;						\
-	    cur_hn = hn_stack[stack_top] = __hsp_n;			\
-	}								\
-	else								\
-	{								\
-	    cur_hn = __hsp_n;						\
-	}								\
-									\
-	/* Set the next bit offset variable. */				\
-	assert(bits_left_in_hash_buffer >= _HT_BITSIZE);		\
-	offset_to_current = offset_to_next;				\
-	offset_to_next = hash_buffer & _HT_BITMASK;			\
-	hash_buffer >>= _HT_BITSIZE;					\
-	bits_left_in_hash_buffer -= _HT_BITSIZE;			\
-									\
-	if(unlikely(bits_left_in_hash_buffer == 0))			\
-	    ReplenishHashBuffer();					\
-	    								\
-	__HnCountSanityCheck();						\
-    }while(0)
-    
-#define __HnStackPushByOffset(push_n, offset, record_stack)		\
-    do{									\
-	_HashTableNode *hspbo_n = (push_n);				\
-	__HnStackPush(_HN_NextNode(hspbo_n, offset), record_stack);	\
-    }while(0)
-
-#define __HnStackPop()							\
-    do{									\
-	__HnCountSanityCheck();						\
-	assert(stack_top != 0);						\
-	assert(stack_top <= _HT_NUMLEVELS);				\
-	assert(hn_stack[stack_top] == cur_hn);				\
-									\
-	--stack_top;							\
-	cur_hn = hn_stack[stack_top];					\
-	__HnCountSanityCheck();						\
-    }while(0)
-
-#define __HnAlterPriorCounts(delta)			\
-    do{							\
-	__HnCountSanityCheck();				\
-							\
-	int i;						\
-	for(i = stack_top-1; i >= 0; --i)		\
-	    __HnAlterNodeCount(hn_stack[i], (delta));	\
-							\
-	ht->count += delta;				\
-							\
-	__HnCountSanityCheck();				\
-    }while(0)
-
-#define __HnInsertIntoEmptyNode(n, hashkey)				\
-    do{									\
-	__HnCountSanityCheck();						\
-	_HashTableNode *_in = n;					\
-	assert(_in->count == 0);					\
-	_in->count = 1;							\
-	_in->next = (void*)(hashkey);					\
-	__HnCountSanityCheck();						\
-    }while(0)
-    
-
-#define __HnInsertIntoEmptyNodeFromPrior(prior_hn, offset, hashkey)	\
-    do{									\
-	__HnCountSanityCheck();						\
-	_HashTableNode *pn = (prior_hn);				\
-	_HashTableNode *in = _HN_NextNode(pn, offset);			\
-	assert(!_HNBO_nodeOn(pn, offset));				\
-									\
-	_HNBO_setNodeOn(pn, offset);					\
-	assert(_HNBO_nodeOn(pn, offset));				\
-									\
-	__HnInsertIntoEmptyNode(in, hashkey);				\
-	__HnCountSanityCheck();						\
-    }while(0)
-
-/****** Debug routines *******/
-
-#define __HnCountSanityCheck()						\
-    do{									\
-	int i;								\
-	for(i = 0; i <= stack_top; ++i)					\
-	{								\
-	    assert(hn_stack[i]->count <= ht->count+1);			\
-	    if(i != 0)							\
-		assert(hn_stack[i]->count <= hn_stack[i-1]->count+1);	\
-	}								\
-    }while(0)
-
-#define __CheckAndReturn(ret_val, might_be_unfrozen)			\
-    do{									\
-	assert(might_be_unfrozen || ret_val == NULL || H_IsLocked(ret_val)); \
-	__HnCountSanityCheck();						\
-	_Ht_debug_HashTableConsistent(ht);				\
-	return ret_val;							\
-    }while(0)
-
-
-/************************************************************/
-
-    /* Check the current stack status. */ 
-    assert(cur_hn == hn_stack[stack_top]);
-    assert(stack_top == 0);
-
-    _Ht_debug_HashTableConsistent(ht);
-
-    if(mode == _HT_WRITE || mode == _HT_WRITE_PASSIVE)
-    {
-	_Ht_MSL_InitIfNeeded(ht, hk);
-
-	/* Assume we should do this by default; undo if needed. */
-	++ht->count;
-	
-	while(1)
-	{
-	    if(cur_hn->count == 0)
-	    {
-		O_INCREF(hk);
-		H_CLAIM_LOCK(hk);
-
-		if(interact_with_msl)  /* Call first, before insert. */
-		    _Ht_MSL_WriteKey(ht, hk);
-		
-		if(last_hn != NULL)
-		    _HNBO_setNodeOn(last_hn, offset_to_current);
-
-		__HnInsertIntoEmptyNode(cur_hn, hk);
-		
-		__CheckAndReturn(hk, false);
-	    }
-	    else if (cur_hn->count == 1)
-	    {
-		HashObject* existing_hk = _HN_HashObject(cur_hn);
-
-		if(unlikely(H_EQUAL(existing_hk, hk)))
-		{
-		    /* No change to count stuff; undo the previous
-		     * count increments. */
-
-		    __HnAlterPriorCounts(-1);
-
-		    if(unlikely(existing_hk == hk))
-			__CheckAndReturn(hk, false);
-
-		    if(mode == _HT_WRITE)
-		    {
-			/* Overwrite the key. */
-			if(interact_with_msl)
-			    _Ht_MSL_DeleteKey(ht, existing_hk);
-
-			O_INCREF(hk);
-			H_CLAIM_LOCK(hk);
-
-			H_RELEASE_LOCK(existing_hk);
-			O_DECREF(existing_hk);
-
-			if(interact_with_msl)
-			    _Ht_MSL_WriteKey(ht, hk);
-
-			cur_hn->next = (void*)hk;
-			
-			__CheckAndReturn(hk, false);
-		    }
-		    else /* mode == _HT_WRITE_PASSIVE */
-		    {
-			__CheckAndReturn(existing_hk, false);
-		    }
-		}
-		else /* Not Equal */
-		{
-		    /* The current data pointer holds a data member;
-		     * need to keep advancing until the two hash
-		     * objects are in separate nodes.  Our hash
-		     * function is strong enough that if they aren't
-		     * equal, it's very unlikely they will end up being
-		     * identical for long.
-		     */
-
-		    /* At this point, the tree is consistent, so write
-		     * it to the MSL now; we know it will go in once
-		     * we figure out where. */
-
-		    O_INCREF(hk);
-		    H_CLAIM_LOCK(hk);
-
-		    if(interact_with_msl)
-			_Ht_MSL_WriteKey(ht, hk);
-
-		    /* Insert it. */
-		    while(1)
-		    {
-			/* Clear the flags and get new node block. */
-			cur_hn->count = 2;
-			cur_hn->node_data = 0;
-			cur_hn->next = _Ht_newNodeBlock(ht);
-			
-			assert(_HN_NextNode(cur_hn, offset_to_next)->count == 0);
-
-			/* Node the current node. */ 
-			int offset_to_next_existing = _H_extractOffset(existing_hk, stack_top + ht->num_first_levels);
-			
-			if(unlikely(offset_to_next_existing == offset_to_next))
-			{
-			    _HNBO_setNodeOn(cur_hn, offset_to_next);
-			    __HnStackPushByOffset(cur_hn, offset_to_next, true);
-			}
-			else
-			{
-			  
-			    __HnInsertIntoEmptyNodeFromPrior(cur_hn, offset_to_next, hk);
-
-			    /* Reinsert the previous one. */
-			    __HnInsertIntoEmptyNodeFromPrior(cur_hn, offset_to_next_existing, existing_hk);
-
-			    __CheckAndReturn(hk, false);
-			}
-		    }
-		}
-	    }
-	    else /* Count >= 2 */ 
-	    {
-		__HnAlterNodeCount(cur_hn, 1);
-		__HnStackPushByOffset(cur_hn, offset_to_next, true);
-	    }
-
-	} /* While loop */
-
-    } /* End if Write operations */
-
-    else if(mode == _HT_GET)
-    {
-	/* Simple retreval, the easiest case. */
-	while(1)
-	{
-	    if(unlikely(cur_hn->count == 0))
-	    {
-		__CheckAndReturn(NULL, false);
-	    }
-	    else if(cur_hn->count == 1)
-	    {
-		HashObject *existing_hk = _HN_HashObject(cur_hn);
-
-		if(H_EQUAL(hk, existing_hk))
-		    __CheckAndReturn(existing_hk, false);
-		else
-		    __CheckAndReturn(NULL, false);
-	    }
-	    else
-	    {
-		if(_HN_NextNode(cur_hn, offset_to_next) == NULL)
-		{
-		    __CheckAndReturn(NULL, false);
-		}
-		else
-		{
-		    __HnStackPushByOffset(cur_hn, offset_to_next, false);
-		}
-	    }
-	}
-    } /* End if read operation. */
-
-    else if(mode == _HT_POP)
-    {
-	if(unlikely(ht->count == 0) )
-	    return NULL;
-
-	--ht->count;
-
-	while(1)
-	{
-	    if(unlikely(cur_hn->count == 0))
-	    {
-		/* Undo previous stack operations */
-		__HnAlterPriorCounts(1);
-		__CheckAndReturn(NULL, false);
-	    }
-	    else if(unlikely(cur_hn->count == 1))
-	    {
-		HashObject *existing_hk = _HN_HashObject(cur_hn);
-		assert(O_IsType(HashObject, existing_hk));
-
-		if(likely(H_EQUAL(hk, existing_hk)))
-		{
-		    /* Gotta remove that key; this one's tricky. */
-
-		    if(interact_with_msl)
-			_Ht_MSL_DeleteKey(ht, existing_hk);
-		    
-		    cur_hn->next = NULL;
-		    cur_hn->count = 0;
-		
-		    /* Unless this is at the base level, go back one
-		     * level to see if the count is only one there.
-		     * If so, then we need to move that key farther
-		     * down to ensure that {count == 1}{implies that
-		     * hn->next points to the hash key.
-		     */ 
-		    
-		    if(last_hn != NULL)
-		    {
-			/* Delete the node holding the hash key. */
-			assert(offset_to_current != -1);
-			
-			_HNBO_delNode(last_hn, offset_to_current);
-
-			/* Go back */
-			__HnStackPop();
-			
-			/* Collapse all the nodes that have only one
-			 * remaining item.  (Recall that count == 1
-			 * means that ->next points to the hashkey,
-			 * not a _HashTableNodeBlock; so this just
-			 * preserves that invariant. */
-
-			if(unlikely(cur_hn->count == 1))
-			{
-			    _HashTableNode *transport_hn = _HN_NextNode(cur_hn, _HNBO_firstOffset(cur_hn));
-			    assert(transport_hn->count == 1);
-			    HashObject *transport_hk = (HashObject*)transport_hn->next;
-
-			    /* So now we have this new hash key; put
-			     * it in the first node that has only one
-			     * node, replacing that node. */
-
-			    while(1)
-			    {
-				_Ht_freeNodeBlock(ht, (_HashTableNodeBlock*)(cur_hn->next));
-
-				/* Look ahead to see if this is an acceptable location for the count. */
-				if(stack_top == 0 || hn_stack[stack_top-1]->count >= 2)
-				{
-				    cur_hn->next = transport_hk;
-				    break;
-				}
-				
-				__HnStackPop();
-			    }
-			}
-		    }
-
-		    H_RELEASE_LOCK(existing_hk);
-		    __CheckAndReturn(existing_hk, true);
-		} /* If equal */
-		else
-		{
-		    __HnAlterPriorCounts(1);
-		    __CheckAndReturn(NULL, false);
-		}
-		assert(false);
-	    } 
-	    else /* count >= 2 */
-	    {
-		__HnAlterNodeCount(cur_hn, -1);
-		assert(cur_hn->next != NULL);
-		__HnStackPushByOffset(cur_hn, offset_to_next, true);
-	    }
-	} /* end while */ 
-    } /* End if pop */
-    else
-    {
-	assert(false);
-	return NULL;
-    }
-
-    /* I can C clearly now, the brain is gone... */
-}
-
-/*****************************************
- * The functions to wrap the above.
- ****************************************/
-
-static inline void _Ht_RunKeyAsserts(HashObject *hk)
-{
-    assert(hk != NULL);
-    assert(O_IsType(HashObject, hk));
-    assert(O_RefCount(hk) >= 1);
-}
-
-HashObject* Ht_Get(HashTable *ht, HashObject *hk)
-{
-    /* Returns the given key if it's present in the hash table; if it
-     * is not preset, NULL is returned. 
-     */
-
-    _Ht_RunKeyAsserts(hk);
-    HashObject *h = _Ht_getItem(ht, hk, _HT_GET, true);
-
-    if(h != NULL)
-    {
-	assert(O_RefCount(h) >= 1);
-	assert(H_LockCount(h) >= 1);
-    }
-
-    _Ht_debug_HashTableConsistent(ht);
-
-    return h;
-}
-
-HashObject* Ht_Pop(HashTable *ht, HashObject *hk)
-{
-    /* Finds the given key in the hash table, deletes it from the tree
-     * and returns it.  The caller would then own a reference to the
-     * item.
-     */
-
-    _Ht_RunKeyAsserts(hk);
-    HashObject *h = _Ht_getItem(ht, hk, _HT_POP, true);
-
-    if(h != NULL)
-    {
-	assert(O_RefCount(h) >= 1);
-	assert(O_RefCount(h) >= H_LockCount(h) + 1);
-    }
-
-    _Ht_debug_HashTableConsistent(ht);
-
-    return h;
-}
-
-bool Ht_Clear(HashTable *ht, HashObject *hk)
-{
-    /* Deletes the given key from the hash table.  Returns true if the
-     * key was present and false otherwise. 
-     */
-    
-    _Ht_RunKeyAsserts(hk);
-
-    hk = _Ht_getItem(ht, hk, _HT_POP, true);
-
-    _Ht_debug_HashTableConsistent(ht);
-
-    if(hk != NULL)
-    {
-	O_DECREF(hk);
-	return true;
-    }
-    else
-    {
-	return false;
-    }
-}
-
-void Ht_Set(HashTable *ht, HashObject *hk)
-{
-    /* Adds the given key to the hash table.  Overwrites the key if it
-     * is present already.  Increments the reference count.
-     */
-
-    _Ht_RunKeyAsserts(hk);
-
-    _Ht_getItem(ht, hk, _HT_WRITE, true);
-
-    assert(O_RefCount(hk) >= 1);
-    assert(H_LockCount(hk) >= 1);
-
-    _Ht_debug_HashTableConsistent(ht);
-
-}
-
-void Ht_Give(HashTable *ht, HashObject *hk)
-{
-    /* Adds the given key to the hash table.  Overwrites the key if it
-     * is present already.
-     *
-     * Need to protect against regiving, i.e. doing a get and then a
-     * give.  Thus the assumption is that the reference count does not
-     * change using this function.
-     */
-
-    size_t prev_ref_count = O_REF_COUNT(hk);
-
-    _Ht_RunKeyAsserts(hk);
-    _Ht_getItem(ht, hk, _HT_WRITE, true);
-
-    assert(H_LOCK_COUNT(hk) >= 1);
-
-    if(O_REF_COUNT(hk) > prev_ref_count)
-	O_DECREF(hk);
-    
-    assert(O_REF_COUNT(hk) == prev_ref_count);
-
-    _Ht_debug_HashTableConsistent(ht);
-
-}
-
-HashObject* Ht_SetDefault(HashTable *ht, HashObject *hk)
-{
-    _Ht_RunKeyAsserts(hk);
-    HashObject *h = _Ht_getItem(ht, hk, _HT_WRITE_PASSIVE, true);
-    
-    assert(O_RefCount(h) >= 1);
-    assert(H_LockCount(h) >= 1);
-
-    _Ht_debug_HashTableConsistent(ht);
-
-    return h;
-}
-
-size_t Ht_Size(HashTable *ht)
-{ 
-    return Ht_SIZE(ht);
-}
-
-bool Ht_Contains(HashTable *ht, HashObject *hk)
-{
-    _Ht_debug_HashTableConsistent(ht);
-
-    return (_Ht_getItem(ht, hk, _HT_GET, true) == NULL) ? false : true;
-}
-
-void Ht_AddMarkerRangeToExistingKey(HashTable *ht, HashObject *hk, markertype r_start, markertype r_end)
-{
-    HashObject *k = Ht_Pop(ht, hk);
-    H_AddMarkerValidRange(k, r_start, r_end);
-    Ht_Give(ht, k);
-}
-
-/********************************************************************************
- *
- *  Some debugging related routines.
- *
- ********************************************************************************/
-
-void _Ht_print_node(_HashTableNode *hn, size_t indent, size_t cap, size_t node_idx)
-{
-    int i, t;
-    static char hkstring[33];
-
-    if(cap == 0) return;
-
-    if(hn->count == 1)
-    {
-	for(t=0;t < indent; ++t)
-	    printf(" ");
-
-	H_ExtractHash(hkstring, _HN_HashObject(hn));
-	hkstring[32] = '\0';
-
-	printf("%lx: ptr=0x%lx, count=%lu\n", 
-	       (long unsigned int)node_idx, (long unsigned int)hn, (long unsigned int)hn->count);
-
-	for(t=0;t < indent; ++t)
-	    printf(" ");
-
-	printf("---> %s -- ", hkstring);
-	Mi_debug_printMi(_HN_HashObject(hn)->mi);
-    }
-    else
-    {
-
-	for(t=0;t < indent; ++t)
-	    printf(" ");
-	    
-	printf("%lx: ptr=0x%lx, count=%ld, local_count=%ld, first=%x, mask=", 
-	       (long unsigned int)node_idx, (long unsigned int)hn, 
-	       (long)hn->count, (long)_HNBO_localCount(hn), (int)_HNBO_firstOffset(hn));
-
-	int j;
-
-	for(j = 0; j < 16; ++j)
-	{
-	    if(_HNBO_nodeOn(hn, j))
-		printf("%x,", j);
-	}
-	
-	printf("\n");
-
-	for(i = 0; i < _HT_LEVEL_SIZE; ++i)
-	{
-	    if(hn->next == NULL)
-	    {
-		printf("COUNT ERROR\n");
-		continue;
-	    }
-
-	    _HashTableNode* nhn = _HN_NextNode(hn, i);
-	
-	    if(nhn == NULL)
-	    {
-		printf("ERROR\n");
-		continue;
-	    }
-    
-	    if(nhn->count == 0) continue;
-	    	    
-	    _Ht_print_node(nhn, indent + 2, cap -1, i);
-	}
-    }
-}
-
-void Ht_debug_print(HashTable *ht)
-{
-    size_t i;
-    
-    printf("Printing Hash Table with %lu nodes.\n\n", (long unsigned int)ht->count);
-
-    for(i = 0; i < _HT_FIRST_LEVEL_SIZE(ht); ++i)
-    {
-	_HashTableNode* nhn = &(ht->nodes[i]);
-	    
-	if(nhn->count == 0) continue;
-
-	_Ht_print_node(nhn, 0, 100, i);
-    }
-}
-
-/********************************************************************************
- *
- *  Internal hash keys functions
- *
- ********************************************************************************/
-
-static inline void _Ht_FillHKFromCurrentTree(HashTable *ht, HashKey *hk)
-{
-    HashTableIterator *hti = Hti_New(ht);
-    HashObject *h;
-
-    Hk_CLEAR(hk);
-
-    while( (h = Hti_Next(hti)) != NULL)
-	Hk_REDUCE_UPDATE(hk, H_Hash_RO(h));
-
-    Hti_Delete(hti);
-}
-    
 
 /********************************************************************************
  *
@@ -1237,44 +671,36 @@ static inline void _Ht_FillHKFromCurrentTree(HashTable *ht, HashKey *hk)
 
 #endif
 
-
-/****************************************
- *
- * Node stack operations for easily moving on the skip list
- *
- ****************************************/
-
 static inline _HT_MSL_NodeStack* _Ht_MSL_BS_New(_HT_MSL_Node *node)
 {
-    _HT_MSL_NodeStack *ns = 
-	(_HT_MSL_NodeStack *) MP_ItemMalloc(&ht_msl_node_stack_pool);
+    _HT_MSL_NodeStack *ns = Mp_New_HT_MSL_NodeStack();
 
     ns->node = node;
     return ns;
 }
 
-#define _Ht_MSL_BS_Delete(msl_bs_ptr)				\
-    do{								\
-	_HT_MSL_NodeStack *nbs, *bs = (msl_bs_ptr);		\
-	while(bs != NULL)					\
-	{							\
-	    nbs = bs->previous;					\
-	    MP_ItemFree(&ht_msl_node_stack_pool, bs);		\
-	    bs = nbs;						\
-	}							\
+#define _Ht_MSL_BS_Delete(msl_bs_ptr)			\
+    do{							\
+	_HT_MSL_NodeStack *nbs, *bs = (msl_bs_ptr);	\
+	while(bs != NULL)				\
+	{						\
+	    nbs = bs->previous;				\
+	    Mp_Free_HT_MSL_NodeStack(bs);		\
+	    bs = nbs;					\
+	}						\
     }while(0)
 
 
 #define _Ht_MSL_BS_Pop(msl_bs_ptr_ptr)					\
     do{									\
 	_HT_MSL_NodeStack *prev_bs = (*(msl_bs_ptr_ptr))->previous;	\
-	MP_ItemFree(&ht_msl_node_stack_pool, (*(msl_bs_ptr_ptr)));	\
+	Mp_Free_HT_MSL_NodeStack(*(msl_bs_ptr_ptr));			\
 	*msl_bs_ptr_ptr = prev_bs;					\
-    }while(0)								
+    }while(0)
 
 static inline void _Ht_MSL_BS_Push(_HT_MSL_NodeStack **ns_ptr, _HT_MSL_Node* node)
 {
-    _HT_MSL_NodeStack *next_bs = (_HT_MSL_NodeStack*)MP_ItemMalloc(&ht_msl_node_stack_pool);
+    _HT_MSL_NodeStack *next_bs = Mp_New_HT_MSL_NodeStack();
     next_bs->node = node;
     next_bs->previous = *ns_ptr;
     *ns_ptr = next_bs;
@@ -1341,48 +767,20 @@ static inline void _Ht_MSL_BS_MoveDown(_HT_MSL_NodeStack **msl_bs_ptr_ptr)
     _Ht_MSL_BS_Push((msl_bs_ptr_ptr), down_node);			
 }
 
-void _Ht_MSL_Init(HashTable *ht)
-{
-    _HT_MarkerSkipList *msl = ht->marker_sl;
-    assert(msl == NULL);
-
-    msl = ht->marker_sl = (_HT_MarkerSkipList*)MP_ItemMalloc(&ht_msl_pool);
-    
-    /* Now set the unmarked_object_hash with the current hash tree's
-     * hashes, since they are all marker-invariant at this point. */ 
-    _Ht_FillHKFromCurrentTree(ht, &msl->unmarked_object_hash);
-
-    /* Now set an initial stack with a single empty node at minus
-     * infinity.  This avoids a bookkeeping headache with a changing
-     * first node.*/
-    
-    msl->first_leaf = _Ht_newMarkerLeaf(ht);
-    msl->first_leaf->marker = MARKER_MINUS_INFTY;
-    /* Rest of leaf zeroed, that's what we want. */
-    
-    msl->start_node = _Ht_newMarkerBranch(ht);
-    msl->start_node->marker = MARKER_MINUS_INFTY;
-    msl->start_node->down = (_HT_MSL_Node*)msl->first_leaf;
-    /* Rest of node zeroed, that's what we want. */
-
-    msl->start_node_level = 1;
-    SetNodeLevel(msl->start_node, msl->start_node_level);
-}
-
 static inline unsigned int __Ht_MSL_NewEntryHeight(_HT_MarkerSkipList *msl)
 {
     /* Returns the height of a new node in the skip list.  There is a
      * 1/4 probability that each node is sent to the next level up. */
     
     unsigned int height = 0;
-    register unsigned long r = msl->cur_rand_factor;
+    unsigned long r = msl->cur_rand_factor;
 
     while(1)
     {
 	if(unlikely(r == 0)) 
-	    r = genrand_uint32();
+	    r = Lcg_Next(&(msl->cur_rand_state));
 	
-	if( unlikely( (r & 0x00000003) ) )
+	if( unlikely( ! (r & 0x00000003) ) )
 	{
 	    ++height;
 	    r >>= 2;
@@ -1450,20 +848,19 @@ static inline void __Ht_MSL_BackupNodeStack(
 
     assert(*ns_ptr != NULL);
 
-    if(!(*ns_ptr)->is_travel_node )
+    if(!(*ns_ptr)->is_travel_node)
 	++(*cur_level_ptr);
 
     assert((*ns_ptr)->node->level == *cur_level_ptr);
 
     /* Update the hash if needed. */
-    if(unlikely(non_travel_node_update_hk != NULL 
+    if(unlikely(non_travel_node_update_hk != NULL
 		&& !(*ns_ptr)->is_travel_node))
     {
 	Hk_REDUCE_UPDATE(&(_Ht_MSL_BS_CurNode(*ns_ptr)->hk), non_travel_node_update_hk);
 	/* DEBUG-LOC */
     }
 }
-
 
 void __Ht_MSL_InsertValue(HashTable *ht, _HT_MSL_NodeStack **ns_ptr, 
 			  unsigned int *cur_level_ptr,
@@ -1703,7 +1100,8 @@ void __Ht_MSL_InsertValue(HashTable *ht, _HT_MSL_NodeStack **ns_ptr,
 }
 
 /* The main interface functions. */
-void _Ht_MSL_WriteKey_Marked(HashTable *ht, HashObject *h, bool switch_add_sub_flags)
+void _Ht_MSL_Write(HashTable *ht, const HashKey *hk, const MarkerInfo *mi,
+		   bool switch_add_sub_flags)
 {
     /* Plan: 
      *
@@ -1733,7 +1131,6 @@ void _Ht_MSL_WriteKey_Marked(HashTable *ht, HashObject *h, bool switch_add_sub_f
      */
 
     /* should be checked at previous level */
-    assert(H_IS_MARKED(h));
     assert(ht->marker_sl != NULL);
     assert(ht->marker_sl->first_leaf != NULL);
 
@@ -1761,52 +1158,50 @@ void _Ht_MSL_WriteKey_Marked(HashTable *ht, HashObject *h, bool switch_add_sub_f
     unsigned int cur_level = msl->start_node_level;
     
     /* Set up the iterations. */
-    MarkerRange *current_mr, *next_mr;
+    MarkerRange current_mr = MARKER_RANGE_DEFAULT;
+    MarkerRange next_mr = MARKER_RANGE_DEFAULT;
 
-    MarkerRevIterator *miri = NewReversedMarkerIterator(h->mi);
+    MarkerRevIterator *miri = Miri_New(mi);
 
     HashKey addition_hk, removal_hk;
     
-    if(unlikely(Hk_ISZERO(H_Hash_RO(h))))
-       return;
-
+    if(unlikely(Hk_ISZERO(hk)))
+	return;
+    
     if(switch_add_sub_flags)
     {
-	Hk_COPY(&removal_hk, H_Hash_RO(h));
-	Hk_NEGATIVE(&addition_hk, H_Hash_RO(h));
+	Hk_COPY(&removal_hk, hk);
+	Hk_NEGATIVE(&addition_hk, hk);
     }
     else
     {
-	Hk_COPY(&addition_hk, H_Hash_RO(h));
-	Hk_NEGATIVE(&removal_hk, H_Hash_RO(h));
+	Hk_COPY(&addition_hk, hk);
+	Hk_NEGATIVE(&removal_hk, hk);
     }
 
-    next_mr = Miri_Next(miri);
-    assert(H_IS_MARKED(h));
-    assert(next_mr != NULL);   /* This case should be caught by H_IsMarked. */
+    Miri_Next(&next_mr, miri);
+    /* assert(next_mr != NULL);  This case should be caught by H_IsMarked. */
 
     HashKey temp;
-    Hk_Reduce(&temp, &addition_hk, &removal_hk);
+    Hk_REDUCE(&temp, &addition_hk, &removal_hk);
     assert(Hk_IsZero(&temp));
 
     while(1)
     {
 	/* Increment the iteration. */
 	current_mr = next_mr;
-	next_mr = Miri_Next(miri);
+	bool next_mr_okay = Miri_Next(&next_mr, miri);
 	
-	markertype add_loc = current_mr->start;
-	markertype sub_loc = current_mr->end;
+	markertype add_loc = current_mr.start;
+	markertype sub_loc = current_mr.end;
 
-	/*
-	printf("\nInserting ");
-	Hk_debug_PrintHash(&addition_hk);
-	printf(" at marker %ld ", add_loc);
+	/* printf("\nInserting "); */
+	/* Hk_debug_PrintHash(&addition_hk); */
+	/* printf(" at marker %ld ", add_loc); */
 
-	printf("and ");
-	Hk_debug_PrintHash(&removal_hk);
-	printf(" at marker %ld\n", sub_loc);
-	*/
+	/* printf("and "); */
+	/* Hk_debug_PrintHash(&removal_hk); */
+	/* printf(" at marker %ld\n", sub_loc); */
 
 	assert(add_loc < sub_loc);
 
@@ -1893,15 +1288,15 @@ void _Ht_MSL_WriteKey_Marked(HashTable *ht, HashObject *h, bool switch_add_sub_f
  
 	// Ht_MSL_debug_Print(ht);
 
-	if(next_mr == NULL)
+	if(unlikely(!next_mr_okay))
 	    break;
 
-	assert(next_mr->end < add_loc);
+	assert(next_mr.end < add_loc);
 
 	/* Another key to do, so go back up the stack until we're at
 	 * the next pivot point. */
 
-	while(next_mr->start < _Ht_MSL_BS_CurNode(ns)->marker)
+	while(next_mr.start < _Ht_MSL_BS_CurNode(ns)->marker)
 	    __Ht_MSL_BackupNodeStack(&ns, &cur_level, NULL);
 
     }
@@ -1911,34 +1306,228 @@ void _Ht_MSL_WriteKey_Marked(HashTable *ht, HashObject *h, bool switch_add_sub_f
     Miri_Delete(miri);
 }
 
-void _Ht_MSL_DeleteKey_Marked(HashTable *ht, HashObject *h)
+/* Writes a single pair for when a range is modified.  Useful for
+ * building up hash tables from sequential markers.  A simplified
+ * version of the _Ht_MSL_Write(...) function. */
+
+void _Ht_MSL_WritePair(HashTable *ht, const HashKey *hk, markertype add_loc, markertype sub_loc,
+		       bool switch_add_sub_flags)
 {
-    _Ht_MSL_WriteKey_Marked(ht, h, true);
+    /* should be checked at previous level */
+    assert(ht->marker_sl != NULL);
+    assert(ht->marker_sl->first_leaf != NULL);
+
+    _HT_MarkerSkipList *msl = ht->marker_sl;
+    
+    /* Create the start of the node stack at the beginning. */
+    _HT_MSL_NodeStack *ns = _Ht_MSL_BS_New((_HT_MSL_Node*)msl->start_node);
+    unsigned int cur_level = msl->start_node_level;
+    
+    HashKey addition_hk, removal_hk;
+    
+    if(unlikely(Hk_ISZERO(hk)))
+	return;
+
+    if(switch_add_sub_flags)
+    {
+	Hk_COPY(&removal_hk, hk);
+	Hk_NEGATIVE(&addition_hk, hk);
+    }
+    else
+    {
+	Hk_COPY(&addition_hk, hk);
+	Hk_NEGATIVE(&removal_hk, hk);
+    }
+
+    HashKey temp;
+    Hk_REDUCE(&temp, &addition_hk, &removal_hk);
+    assert(Hk_IsZero(&temp));
+
+    assert(add_loc < sub_loc);
+
+    unsigned int new_h1 = __Ht_MSL_NewEntryHeight(msl);
+    unsigned int new_h2 = __Ht_MSL_NewEntryHeight(msl);
+	
+    /* Decide on a threshhold level and marker location
+     * before/above which adding the same hash key to two places
+     * in the tree won't affect the node hashes, as they cancel
+     * each other out.  */
+
+    unsigned int threshhold_level = new_h1 > new_h2 ? new_h1 : new_h2;
+    markertype threshhold_marker = add_loc;
+
+    unsigned int alt_threshhold_level = 0;
+
+    /* Advance to the leaf. */
+    do{
+	/* Catch the upper left point in the stack where the hash
+	 * might possibly change. */
+	if(ns->node->marker <= add_loc)
+	{
+	    alt_threshhold_level = cur_level;
+	    threshhold_marker = ns->node->marker;
+	}
+
+    }while(__Ht_MSL_AdvanceNodeStack(&ns, &cur_level, sub_loc));
+
+    if(alt_threshhold_level > threshhold_level)
+	threshhold_level = alt_threshhold_level;
+	
+    __Ht_MSL_InsertValue(ht, &ns, &cur_level, &removal_hk, &addition_hk, sub_loc, new_h1);
+
+    // printf("########################################\n");
+    // printf("After inserting r_hk at sub_loc\n");
+
+    // Ht_MSL_debug_Print(ht);
+
+    /* Now unwind the stack to the first node with a marker value
+     * less than add_loc, rerun the stack from there.  We need to
+     * add in the hash of the key to each vertical traverse in
+     * this process. */
+	
+    assert(ns->node->marker <= sub_loc);
+
+    while( (_Ht_MSL_BS_CurNode(ns)->marker >= threshhold_marker
+	    || cur_level <= threshhold_level)
+	   && ns->previous != NULL)
+    {
+	__Ht_MSL_BackupNodeStack(&ns, &cur_level, &removal_hk);
+    }
+
+    assert(ns->node->level == cur_level);
+    assert(ns->node->marker <= add_loc);
+
+    /* Advance down to the base; we can't update the hash at this
+     * point, since InsertValue may modify it. */
+    while(__Ht_MSL_AdvanceNodeStack(&ns, &cur_level, add_loc));
+
+    /* Insert this value. */
+    __Ht_MSL_InsertValue(ht, &ns, &cur_level, &addition_hk, &removal_hk, add_loc, new_h2);
+
+    /* Go back updating the nodes to the same point as before. */
+    while( (_Ht_MSL_BS_CurNode(ns)->marker >= threshhold_marker
+	    || cur_level <= threshhold_level)
+	   && ns->previous != NULL)
+    {
+	__Ht_MSL_BackupNodeStack(&ns, &cur_level, &addition_hk);
+    }
+
+    /* We're done, just delete the node stack and iterator. */
+    _Ht_MSL_BS_Delete(ns);
 }
 
-/************************************************************
- *
- *  Interacting with the unmarked tree hash.
- *
- ************************************************************/
-
-void _Ht_MSL_WriteKey_Unmarked(HashTable *ht, HashObject *h)
+static inline void _Ht_MSL_WriteKey(HashTable *ht, HashObject *h)
 {
     if(ht->marker_sl != NULL)
     {
-	Hk_REDUCE_UPDATE(&ht->marker_sl->unmarked_object_hash, H_Hash_RO(h));
+	H_ClaimMarkerLock(h);
+
+	if(Mi_VALID_ANYWHERE(H_Mi(h)))
+	    _Ht_MSL_Write(ht, H_Hash_RO(h), H_Mi(h), false);
     }
 }
 
-void _Ht_MSL_DeleteKey_Unmarked(HashTable *ht, HashObject *h)
+static inline void _Ht_MSL_DeleteKey(HashTable *ht, HashObject *h)
 {
-    HashKey hk;
-    Hk_NEGATIVE(&hk, H_Hash_RO(h));
-
-    /* Same operation as writing. */
     if(ht->marker_sl != NULL)
     {
-	Hk_REDUCE_UPDATE(&ht->marker_sl->unmarked_object_hash, &hk);
+	H_ReleaseMarkerLock(h);
+
+	if(Mi_VALID_ANYWHERE(H_Mi(h)))
+	    _Ht_MSL_Write(ht, H_Hash_RO(h), H_Mi(h), true);
+    }
+}
+
+void _Ht_MSL_Init(HashTable *ht)
+{
+    _HT_MarkerSkipList *msl = ht->marker_sl;
+    assert(msl == NULL);
+
+    msl = ht->marker_sl = Mp_New_HT_MarkerSkipList();
+    
+    /* Now set an initial stack with a single empty node at minus
+     * infinity.  This avoids a bookkeeping headache with a changing
+     * first node.*/
+    
+    msl->first_leaf = _Ht_newMarkerLeaf(ht);
+    msl->first_leaf->marker = MARKER_MINUS_INFTY;
+    /* Rest of leaf zeroed, that's what we want. */
+    
+    msl->start_node = _Ht_newMarkerBranch(ht);
+    msl->start_node->marker = MARKER_MINUS_INFTY;
+    msl->start_node->down = (_HT_MSL_Node*)msl->first_leaf;
+    /* Rest of node zeroed, that's what we want. */
+
+    msl->start_node_level = 1;
+    msl->cur_rand_state = Lcg_New(0);
+    msl->cur_rand_factor = Lcg_Next(&(msl->cur_rand_state));
+    SetNodeLevel(msl->start_node, msl->start_node_level);
+
+    /* Now go through and insert all the values. */
+    _HashTableInternalIterator hti;
+    HashObject *h;
+
+    _Hti_INIT(ht, &hti);
+    
+    while(_Hti_NEXT(&h, &hti))
+	_Ht_MSL_WriteKey(ht, h);
+}
+
+/**** needed routines that interface with the hash object stuff. ****/
+void _Ht_MSL_Drop(HashTable *ht)
+{
+    /* Drops the current msl if needed. */
+
+    _HT_MarkerSkipList *msl = ht->marker_sl;
+
+    if(likely(msl != NULL))
+    {
+#ifndef NDEBUG	
+	{
+	    _HashTableInternalIterator hti;
+	    _Hti_INIT(ht, &hti);
+	    HashObject *h;
+    
+	    while(_Hti_NEXT(&h, &hti))
+		H_ReleaseMarkerLock(h);
+	}
+#endif
+
+	/* Walk all the structures releasing them back to the common
+	 * memory pools. */
+
+	/* Clear all the branches. */
+
+	for(;msl->start_node_level != 0; --msl->start_node_level) 
+	{
+	    assert(msl->start_node != NULL);
+
+	    _HT_MSL_Node *br = (_HT_MSL_Node*)(msl->start_node);
+
+	    do{
+		_HT_MSL_Node *old_br = br;
+		br = br->next;
+		Mp_Free_HT_MSL_Branch(_HT_MSL_AsBranch(old_br));
+	    }while(br != NULL);
+		    
+	    msl->start_node = (_HT_MSL_Branch*) msl->start_node->down;
+	}
+ 
+	/* Now clear all the nodes. */
+
+	assert(msl->first_leaf != NULL);
+
+	_HT_MSL_Leaf *leaf = msl->first_leaf;
+	    
+	do{
+	    _HT_MSL_Leaf *old_leaf = leaf;
+	    leaf = (_HT_MSL_Leaf*)leaf->next;
+	    Mp_Free_HT_MSL_Leaf(old_leaf);
+	}while(leaf != NULL);
+
+	/* Finally clear the msl itself. */
+	Mp_Free_HT_MarkerSkipList(ht->marker_sl);
+	ht->marker_sl = NULL;
     }
 }
 
@@ -1951,23 +1540,15 @@ void _Ht_MSL_DeleteKey_Unmarked(HashTable *ht, HashObject *h)
 /* Retrieve the hash at a certain marker point. */
 void _Ht_MSL_HashAtMarkerPoint(HashKey *hk_dest, HashTable *ht, markertype loc)
 {
+    Hk_CLEAR(hk_dest);
 
     if(unlikely(loc == MARKER_PLUS_INFTY))
-    {
-	Hk_CLEAR(hk_dest);
 	return;
-    }
+
+    if(unlikely(ht->marker_sl == NULL))
+	_Ht_MSL_Init(ht);
 
     _HT_MarkerSkipList *msl = ht->marker_sl;
-
-    if(unlikely(msl == NULL))
-    {
-	_Ht_MSL_Init(ht);
-	Hk_COPY(hk_dest, &(ht->marker_sl->unmarked_object_hash));
-	return;
-    }
-
-    Hk_COPY(hk_dest, &(ht->marker_sl->unmarked_object_hash));
 
     /* Just travel down the tree to the node before this one. */
     _HT_MSL_NodeStack *ns = _Ht_MSL_BS_New((_HT_MSL_Node*)msl->start_node);
@@ -1991,6 +1572,344 @@ void _Ht_MSL_HashAtMarkerPoint(HashKey *hk_dest, HashTable *ht, markertype loc)
     }
 }
 
+/*****************************************
+ * The functions to wrap the above.
+ ****************************************/
+
+
+static inline HashObject* _Ht_Insert(ht_rptr ht, HashObject *h, 
+				     bool overwrite, bool claim_reference)
+{
+    /* printf("Adding new hash key: \n"); */
+    /* H_debug_print(h); */
+
+    assert(h != NULL);
+    assert(O_RefCount(h) >= 1);
+
+    _HT_Table_Insert_Return r = _Ht_Table_Insert(ht, h, overwrite);
+
+    if(likely(r.was_inserted))
+    {
+	assert(r.h == h);
+
+	if(claim_reference)
+	    O_INCREF(h);
+
+	if(unlikely(ht->marker_sl != NULL))
+	    _Ht_MSL_WriteKey(ht, h);
+
+	if(likely(r.replaced == NULL))
+	{
+	    ++ht->size;
+	}
+	else
+	{
+	    assert(O_RefCount(r.replaced) >= 1);
+	    
+	    _Ht_MSL_DeleteKey(ht, r.replaced);
+	    
+	    O_DECREF(r.replaced);
+	}
+    }
+
+    _Ht_debug_HashTableConsistent(ht);
+
+    return r.h;
+}
+
+static inline void _Ht_GiveAppendUnique(ht_rptr ht, HashObject *h)
+{
+    _HT_Item hi = _Ht_Table_MakeItem(h);
+    size_t idx = _Ht_Table_Index(ht, hi.hk64);
+
+    _Ht_Table_AppendUnique(&(ht->table[idx]), hi);
+
+    ++ht->size;
+
+    if(unlikely(ht->marker_sl != NULL))
+	_Ht_MSL_WriteKey(ht, h);
+}
+
+static inline void _Ht_RunKeyAsserts(const HashObject *hk)
+{
+    assert(hk != NULL);
+    assert(O_IsType(HashObject, hk));
+    assert(O_RefCount(hk) >= 1);
+}
+
+inline HashObject* Ht_ViewByKey(const HashTable *ht, HashKey hk)
+{
+    /* Returns the given key if it's present in the hash table; if it
+     * is not preset, NULL is returned. 
+     */
+
+    /* These should be optimized out. */
+    _ht_node_rptr htn = NULL, base_node = NULL;
+    unsigned int node_idx = 0;
+    HashObject *h;
+
+    _Ht_Table_Find(&htn, &node_idx, &base_node, &h, ht, hk);
+
+    if(h != NULL)
+    {
+	assert(O_RefCount(h) >= 1);
+	if(ht->marker_sl != NULL)
+	    assert(H_MarkerLockCount(h) >= 1);
+    }
+
+    _Ht_debug_HashTableConsistent(ht);
+
+    return h;
+}
+
+HashObject* Ht_View(const HashTable *ht, const HashObject *h)
+{
+    _Ht_RunKeyAsserts(h);
+    return Ht_ViewByKey(ht, *H_Hash_RO(h));
+}
+
+HashObject* Ht_Get(const HashTable *ht, const HashObject *hk)
+{
+    /* Returns the given key if it's present in the hash table; if it
+     * is not preset, NULL is returned. 
+     */
+    HashObject *ret = Ht_View(ht, hk);
+
+    if(ret != NULL)
+	O_INCREF(ret);
+
+    return ret;
+}
+
+static inline void _Ht_Deletion_Bookkeeping(
+    HashTable *ht, HashObject *h, const bool decref)
+{
+    --(ht->size);
+
+    assert(O_RefCount(h) >= 1);
+
+    if(decref)
+	O_DECREF(h);
+	
+    _Ht_debug_HashTableConsistent(ht);
+}
+
+static inline HashObject* _Ht_Pop(HashTable *ht, const HashKey hk, bool decref)
+{
+    /* Finds the given key in the hash table, deletes it from the tree
+     * and returns it.  The caller would then own a reference to the
+     * item.
+     */
+
+    _ht_node_rptr node = NULL, base_node = NULL;
+    unsigned int node_idx = 0;
+    HashObject *h;
+
+    _Ht_Table_Find(&node, &node_idx, &base_node, &h, ht, hk);
+
+    if(h != NULL)
+    {
+	_Ht_Table_Delete(node, base_node, node_idx, h);
+
+	if(ht->marker_sl != NULL)
+	{
+	    assert(H_MarkerLockCount(h) >= 1);
+	    assert(H_MarkerLockCount(h) <= O_RefCount(h));
+	}
+    
+	if(ht->marker_sl != NULL)
+	    _Ht_MSL_DeleteKey(ht, h);
+
+	/* Must be called last. */
+	_Ht_Deletion_Bookkeeping(ht, h, decref);
+    }
+
+    return h;
+}
+
+/* Deletes the given key from the hash table.  Returns true if the key
+ * was present and false otherwise.
+ */
+HashObject* Ht_Pop(HashTable *ht, const HashObject *h)
+{
+    _Ht_RunKeyAsserts(h);
+    return _Ht_Pop(ht, *H_Hash_RO(h), false);
+}
+
+HashObject* Ht_PopByKey(HashTable *ht, HashKey hk)
+{
+    return _Ht_Pop(ht, hk, false);
+}
+
+bool Ht_Clear(HashTable *ht, const HashObject *h)
+{
+    _Ht_RunKeyAsserts(h);
+    return (_Ht_Pop(ht, *H_Hash_RO(h), true) != NULL);
+}
+
+bool Ht_ClearByKey(HashTable *ht, HashKey hk)
+{
+return (_Ht_Pop(ht, hk, true) != NULL);
+}
+
+void Ht_Give(HashTable *ht, HashObject *h)
+{
+    /* Adds the given key to the hash table.  Overwrites the key if it
+     * is present already.
+     *
+     * Need to protect against regiving, i.e. doing a get and then a
+     * give.  Thus the assumption is that the reference count does not
+     * change using this function.
+     */
+
+    _Ht_Insert(ht, h, true, false);
+
+    assert(ht->marker_sl == NULL || H_MarkerLockCount(h) >= 1);
+    assert(O_RefCount(h) >= 1);
+    
+    _Ht_debug_HashTableConsistent(ht);
+}
+
+/* Adds the given key to the hash table.  Overwrites the key if it is
+ * present already.  Increments the reference count.
+ */
+
+void Ht_Set(HashTable *ht, HashObject *h)
+{    
+    _Ht_Insert(ht, h, true, true);
+}
+
+HashObject* Ht_SetDefault(HashTable *ht, HashObject *h)
+{
+    return _Ht_Insert(ht, h, false, true);
+}
+
+size_t Ht_Size(ht_crptr ht)
+{ 
+    return Ht_SIZE(ht);
+}
+
+bool Ht_Contains(ht_crptr ht, const HashObject *hk)
+{
+    return (Ht_View(ht, hk) == NULL) ? false : true;
+}
+
+bool Ht_ContainsByKey(ht_crptr ht, HashKey hk)
+{
+    return (Ht_ViewByKey(ht, hk) == NULL) ? false : true;
+}
+
+bool Ht_ContainsAtByKey(ht_crptr ht, HashKey hk, markertype m)
+{
+    _Ht_debug_HashTableConsistent(ht);
+
+    HashObject *h = Ht_ViewByKey(ht, hk);
+
+    return (h != NULL) ? H_MarkerPointIsValid(h, m) : false;
+}
+
+bool Ht_ContainsAt(ht_crptr ht, const HashObject * hk, markertype m)
+{
+    _Ht_debug_HashTableConsistent(ht);
+
+    HashObject *h = Ht_View(ht, hk);
+
+    return (h != NULL) ? H_MarkerPointIsValid(h, m) : false;
+}
+
+HashObject* Ht_InsertValidRange(HashTable *ht, HashObject *hk, 
+				markertype r_start, markertype r_end)
+{
+    if(ht->marker_sl == NULL)
+    {
+	HashObject *k = Ht_View(ht, hk);
+    
+	if(k == NULL)
+	{
+	    H_ADD_MARKER_VALID_RANGE(hk, r_start, r_end);
+	    Ht_Set(ht, hk);
+	    _Ht_debug_HashTableConsistent(ht);
+	    return hk;
+	}
+	else
+	{
+	    H_ADD_MARKER_VALID_RANGE(k, r_start, r_end);
+	    _Ht_debug_HashTableConsistent(ht);
+	    return k;
+	}
+    }
+    else
+    {
+	HashObject *k = Ht_Pop(ht, hk);
+    
+	if(k == NULL)
+	{
+	    H_ADD_MARKER_VALID_RANGE(hk, r_start, r_end);
+	    Ht_Set(ht, hk);
+	    _Ht_debug_HashTableConsistent(ht);
+	    return hk;
+	}
+	else
+	{
+	    H_ADD_MARKER_VALID_RANGE(k, r_start, r_end);
+	    Ht_Give(ht, k);
+	    _Ht_debug_HashTableConsistent(ht);
+	    return k;
+	}
+    }
+}
+
+/* To be used internally to speed up some things. */
+static inline HashObject* _Ht_InsertValidNonOverlappingRange(
+    HashTable *ht, HashObject *hk, markertype r_start, markertype r_end)
+{
+    HashObject *k = Ht_View(ht, hk);
+
+    if(k == NULL)
+    {
+	H_GIVE_MARKER_INFO(hk, Mi_New(r_start, r_end));
+	Ht_Set(ht, hk);
+	return hk;
+    }
+    else
+    {
+	if(ht->marker_sl == NULL)
+	    H_ADD_MARKER_VALID_RANGE(k, r_start, r_end);
+	else
+	{
+	    H_ReleaseMarkerLock(k);
+	    assert(H_MarkerLockCount(k) == 0);
+	    _Ht_MSL_WritePair(ht, H_Hash_RO(k), r_start, r_end, false);
+	    H_ClaimMarkerLock(k);
+	}
+
+	O_DECREF(hk);
+
+	_Ht_debug_HashTableConsistent(ht);
+    }
+    return k;
+}
+
+
+/********************************************************************************
+ *
+ *  Various other operations 
+ *
+ ********************************************************************************/
+
+HashTable* Ht_Copy(ht_crptr ht)
+{
+    ht_rptr new_ht = NewSizeOptimizedHashTable(Ht_Size(ht));
+    HashObject *h;
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+
+    while(_Hti_NEXT(&h, &hti))
+	_Ht_GiveAppendUnique(new_ht, h);
+
+    return new_ht;
+}
+
 /****************************************
  *
  *  HashTable functions to go with the above. 
@@ -2007,14 +1926,47 @@ HashObject* Ht_HashAtMarkerPoint(HashObject *h_dest, HashTable *ht, markertype m
     return h_dest;
 }
 
-bool Ht_ContainsAt(HashTable *ht, HashObject *_h, markertype m)
+bool Ht_EqualAtMarker(ht_rptr ht1, ht_rptr ht2, markertype m)
 {
-    HashObject *h = Ht_Get(ht, _h);
+    if(unlikely(ht1 == ht2))
+	return true;
 
-    if(h == NULL) 
-	return false;
-    else
-	return H_MarkerPointIsValid(h, m);
+    assert(O_RefCount(ht1) >= 1);
+    assert(O_RefCount(ht2) >= 1);
+
+    HashKey hk1, hk2;
+    _Ht_MSL_HashAtMarkerPoint(&hk1, ht1, m);
+    _Ht_MSL_HashAtMarkerPoint(&hk2, ht2, m);
+
+    return Hk_EQUAL(&hk1, &hk2);
+}
+
+HashObject* Ht_HashOfEverything(HashObject* h_dest, ht_rptr ht)
+{
+    if(h_dest == NULL)
+	h_dest = NewHashObject();
+
+    H_Clear(h_dest);
+
+    HashTableMarkerIterator* htmi = Htmi_New(ht);
+    HashValidityItem hvi;
+
+    while(Htmi_NEXT(&hvi, htmi))
+    {
+	Hk_InplaceCombine(H_Hash_RW(h_dest), &(hvi.hk));
+	
+	int64_t s = (abs(hvi.start) <= 1000000) 
+	    ? (uint64_t)(1000 * hvi.start) : (uint64_t)(hvi.start);
+
+	int64_t e = (abs(hvi.end) <= 1000000) 
+	    ? (uint64_t)(1000 * hvi.end) : (uint64_t)(hvi.end);
+
+	Hk_UpdateWithTwoInts(H_Hash_RW(h_dest), s, e);
+    }
+
+    Htmi_Finish(htmi);
+
+    return h_dest;
 }
 
 
@@ -2024,13 +1976,39 @@ bool Ht_ContainsAt(HashTable *ht, HashObject *_h, markertype m)
  *
  ****************************************/
 
+void Ht_debug_Print(HashTable *ht)
+{
+    printf("\n");
+    printf("HashTable %lx:\n", (size_t)ht);
+    
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+    
+    HashObject *h;
+
+    while(_Hti_NEXT(&h, &hti))
+    {
+	printf("   ");
+	H_debug_print(h);
+	printf("\n");
+    }
+    
+    Ht_MSL_debug_Print(ht);
+}
+
 void Ht_MSL_debug_Print(HashTable *ht)
 {
     printf("\n");
+
+    bool drop_msl = false;
+
+    if(ht->marker_sl == NULL)
+    {
+	_Ht_MSL_Init(ht);
+	drop_msl = true;
+    }
+
     _HT_MarkerSkipList *msl = ht->marker_sl;
-    
-    if(msl == NULL)
-	return;
 
     int h = msl->start_node_level;
     
@@ -2080,11 +2058,14 @@ void Ht_MSL_debug_Print(HashTable *ht)
 
     printf("\n");
     fflush(stdout);
+
+    if(drop_msl)
+	_Ht_MSL_Drop(ht);
 }
 
 void Ht_MSL_debug_PrintNodeStack(_HT_MSL_NodeStack *ns)
 {
-    printf("NodeStack %x:", (size_t)ns);
+    printf("NodeStack %lxud:", (size_t)ns);
 
     while(ns != NULL)
     {
@@ -2112,6 +2093,160 @@ void Ht_MSL_debug_PrintNodeStack(_HT_MSL_NodeStack *ns)
 }
 
 
+#ifdef RUN_CONSISTENCY_CHECKS
+
+#warning "Running internal consistency checks as part of hashtable operations; some processes may be slow." 
+
+size_t __Ht_debug_CountChainedTableNodes(const _HT_Node * hn)
+{
+    size_t s = hn->size;
+    
+    if(hn->next_chain != NULL)
+	s += __Ht_debug_CountChainedTableNodes(&(hn->next_chain->node));
+    
+    return s;
+}
+
+void _Ht_debug_HashTableConsistent(const HashTable *_ht)
+{
+    /* Trust me, I know what I'm doing. */
+    HashTable *ht = (HashTable*)_ht;
+
+    /* Go through the table and check sizes. */
+    size_t i, s = 0;
+
+    for(i = 0; i < ht->_table_size; ++i)
+	s += __Ht_debug_CountChainedTableNodes(&(ht->table[i]));
+
+    if(s != ht->size)
+    {
+	fprintf(stderr, "Actual table count = %ld, tracked size count = %ld.\n",
+	       s, ht->size);
+
+	abort();
+    }
+
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+
+    HashObject *h;
+    s = 0;
+
+    while(_Hti_NEXT(&h, &hti))
+    {
+	++s;
+	assert(O_IsType(HashObject, h));
+	assert(O_RefCount(h) >= 1);
+	assert(ht->marker_sl == NULL || H_MarkerLockCount(h) >= 1);
+	
+	assert(hti.debug_current_node->size != 0);
+	assert(hti.debug_current_node->items[hti.debug_current_index].obj == h);
+	assert(hti.debug_current_node->items[hti.debug_current_index].hk64 == H_Hash_RO(h)->hk64[HK64I(0)]);
+    }
+    
+    if(s != ht->size)
+    {
+	fprintf(stderr, "Iterator covered %ld elements, size = %ld.\n", s, ht->size);
+	
+	abort();
+    }
+
+    // Now step through to make sure things are working 
+    bool clear_marker = false;
+    
+    if(ht->marker_sl == NULL)
+    {
+	return;
+	_Ht_MSL_Init(ht);
+	clear_marker = true;
+    }
+
+    _HT_MarkerSkipList *msl = ht->marker_sl;
+
+    /* Now just walk through the marker list, adding the hash between
+     * each subsequent node. */
+
+    HashObject *temp_h = ALLOCATEHashObject();
+    HashObject *running_h = ALLOCATEHashObject();
+
+
+    _HT_MSL_Node *next_leaf;
+    _HT_MSL_Node *cur_leaf = (_HT_MSL_Node *)msl->first_leaf;
+    
+    /* HashTableMarkerIterator htmi; */
+    /* HashValidityItem hv; */
+    /* Htmi_INIT(ht, &htmi); */
+    /* Htmi_NEXT(&hv, &htmi); */
+
+    markertype cur_m, next_m;
+
+    do{
+	cur_m = cur_leaf->marker;
+	Hk_REDUCE_UPDATE(H_Hash_RW(running_h), &(cur_leaf->hk));
+
+	/* if(!Hk_Equal(H_Hash_RO(running_h), &(hv.hk))) */
+	/* { */
+	/*     printf("\nError; htmi != hash at point = %ld\n", cur_m); */
+
+	/*     printf("\n running hash = "); */
+	/*     H_debug_print(running_h); */
+
+	/*     printf("\n Htmi hash = "); */
+	/*     Hk_debug_PrintHash(&hv.hk); */
+
+	/*     abort(); */
+	/* } */
+
+	Ht_HashAtMarkerPoint(temp_h, ht, cur_m);
+
+	if(!H_Equal(temp_h, running_h))
+	{
+	    printf("\n\n##############\nMarker point = %ld", cur_m);
+	    printf("\n calc hash = ");
+	    H_debug_print(running_h);
+
+	    printf("\n retrieved hash = ");
+	    H_debug_print(temp_h);
+
+	    printf("\n Hash table = ");
+
+	    Ht_debug_Print(ht);
+	    abort();
+	}
+
+	/* printf("\n running hash = "); */
+	/* H_debug_print(running_h); */
+	/* printf("[%ld, %ld)", cur_m, next_m); */
+
+	/* printf("\n Htmi hash = "); */
+	/* Hk_debug_PrintHash(&hv.hk); */
+	/* printf("[%ld, %ld)", hv.start, hv.end); */
+
+	next_leaf = cur_leaf->next;
+
+	if(next_leaf == NULL)
+	    next_m = MARKER_PLUS_INFTY;
+	else
+	    next_m = next_leaf->marker;
+
+	cur_leaf = next_leaf;
+
+	/* if(cur_leaf == NULL) */
+	/*     assert(!okay); */
+	/* else */
+	/*     assert(okay); */
+
+    }while(cur_leaf != NULL);
+
+    O_DECREF(temp_h);
+    O_DECREF(running_h);
+
+    if(clear_marker)
+	_Ht_MSL_Drop(ht);
+
+}
+#endif
+
 
 /********************************************************************************
  * 
@@ -2119,137 +2254,31 @@ void Ht_MSL_debug_PrintNodeStack(_HT_MSL_NodeStack *ns)
  *
  *********************************************************************************/
 
-/* Creates a new iterator.  Calling next on a new iterator returns the
- * first element. */
-HashTableIterator* Hti_New(HashTable *ht)
+
+HashTableIterator* Hti_New(ht_rptr ht)
 {
-    HashTableIterator *hti = malloc(sizeof(HashTableIterator));
-    memset(hti, 0, sizeof(HashTableIterator));
+    HashTableIterator *hti = (HashTableIterator *)malloc(sizeof(HashTableIterator));
+    
+    _Hti_INIT(ht, &(hti->hti));
 
     hti->ht = ht;
+
+    O_INCREF(ht);
 
     return hti;
 }
 
-/* Deletes the current iterator.  This needs to be called after every
- * iteration has finished.  */
+/* Iterates through the hash key structure; returns NULL after the
+ * last element has been returned. */
+bool Hti_Next(HashObject **_h_ptr, HashTableIterator *hti)
+{
+    return Hti_NEXT(_h_ptr, hti);
+}
 
 void Hti_Delete(HashTableIterator *hti)
 {
+    O_DECREF(hti->ht);
     free(hti);
-}
-
-/* Iterates through the hash key structure; returns NULL after the
- * last element has been returned. */
-HashObject *Hti_Next(HashTableIterator *hti)
-{
-    bool advance_along_base;
-
-    if(unlikely(hti->ht->count == 0))
-    {
-	return NULL;
-    }
-
-    if(unlikely(hti->count == 0))
-    {
-	/* We're at the starting iteration. */
-	advance_along_base = true;
-	hti->top_level_pos = 0;
-    }
-    else
-    {
-	/* We're at a previous node; descend as needed. */
-	
-	while(1)
-	{
-	    /* Advance down one node and test if it's done. */
-	    
-	    if(hti->stack_top == 0)
-	    {
-		/* This node is at the base; so advance along the base. */
-		++hti->top_level_pos;
-		advance_along_base = true;
-		break;
-	    }
-	    else
-	    {
-		--hti->stack_top;
-	    }
-
-	    if(_HNBO_localCount(hti->hn_stack[hti->stack_top]) != hti->num_stack[hti->stack_top])
-	    {
-		advance_along_base = false;
-		
-		/* Ready the node. */
-		hti->loc_stack[hti->stack_top] = 
-		    _HNBO_nextNode(hti->hn_stack[hti->stack_top], 
-				     hti->loc_stack[hti->stack_top] + 1);
-		
-		++hti->num_stack[hti->stack_top];
-		
-		break;
-	    }
-	    else
-	    {
-		/* We're done with this node, drop down again. */
-		continue;
-	    }
-	}
-    }
-
-    /* Now advance along the base if needed. */
-    if(advance_along_base)
-    {
-	assert(hti->stack_top == 0);
-
-	while(1)
-	{
-	    if(hti->top_level_pos == _HT_FIRST_LEVEL_SIZE(hti->ht))
-	    {
-		/* We're done completely. */
-		assert(hti->count == hti->ht->count);
-		return NULL;
-	    }
-
-	    if(hti->ht->nodes[hti->top_level_pos].count != 0)
-	    {
-		/* Ready the node. */
-		_HashTableNode *hn = &(hti->ht->nodes[hti->top_level_pos]);
-		hti->hn_stack[0]  = hn;
-		hti->loc_stack[0] = _HNBO_firstOffset(hn);
-		hti->num_stack[0] = 1;
-		
-		break;
-	    }
-	    
-	    ++hti->top_level_pos;
-	}
-    }
-
-    /* Now the stack_top node and location are poised to advance up to
-     * the next value node. */
-
-    while(1)
-    {
-	
-	if(hti->hn_stack[hti->stack_top]->count == 1)
-	{
-	    ++hti->count;
-	    return _HN_HashObject(hti->hn_stack[hti->stack_top]);
-	}
-	else
-	{
-	    _HashTableNode *next_hn = _HN_NextNode(hti->hn_stack[hti->stack_top], 
-						   hti->loc_stack[hti->stack_top]);
-
-	    ++hti->stack_top;
-	    hti->hn_stack[hti->stack_top] = next_hn;
-	    hti->loc_stack[hti->stack_top] = _HNBO_firstOffset(next_hn);
-	    hti->num_stack[hti->stack_top] = 1;
-
-	    continue;
-	}
-    }
 }
 
 /********************************************************************************
@@ -2259,323 +2288,797 @@ HashObject *Hti_Next(HashTableIterator *hti)
  *
  *********************************************************************************/
 
-HashTableBufferedIterator* Htib_New(HashTable *ht)
+HashTableBufferedIterator* Htib_New(ht_crptr ht)
 {
-    HashTableBufferedIterator *htib = (HashTableBufferedIterator*)malloc(sizeof(HashTableBufferedIterator));
+    _Ht_debug_HashTableConsistent(ht);
 
-    htib->count = Ht_SIZE(ht);
-    htib->position = 0;
-    htib->object_buffer = (HashObject**)malloc(sizeof(HashObject*)*(htib->count + 1));
+    HashTableBufferedIterator *htib = 
+	(HashTableBufferedIterator*)malloc(sizeof(HashTableBufferedIterator));
+
+    htib->left = Ht_SIZE(ht);
+    htib->object_buffer = (HashObject**)malloc(sizeof(HashObject*)*(htib->left));
 
     assert(htib->object_buffer != NULL);
 
-    HashTableIterator* hti = Hti_New(ht);
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
 
     HashObject *h;
 
     size_t i = 0;
 
-    while( (h = Hti_Next(hti)) != NULL)
+    while(_Hti_NEXT(&h, &hti))
     {
 	O_INCREF(h);
-	assert(i < htib->count);
+	assert(i < htib->size);
 	htib->object_buffer[i] = h;
 	++i;
     }
 
-    assert(i == htib->count);
+    assert(i == ht->size);
 
-    Hti_Delete(hti);
+    htib->next = htib->object_buffer;
+    htib->size = ht->size;
 
     return htib;
 }
 
 /* Iterates through the hash key structure; returns NULL after the
  * last element has been returned. */
-HashObject *Htib_Next(HashTableBufferedIterator *htib)
+bool Htib_Next(HashObject** h_ptr, HashTableBufferedIterator *htib)
 {
-    if(htib->position == htib->count)
-    {
-	return NULL;
-    }
-    else
-    {
-	HashObject *ret = htib->object_buffer[htib->position];
-	++htib->position;
-	return ret;
-    }
+    return Htib_NEXT(h_ptr, htib);
 }
 
 /* Deletes the current iterator.  This needs to be called after every
  * iteration has finished.  */
 void Htib_Delete(HashTableBufferedIterator *htib)
 {
-    size_t i;
+    HashObject **iter = htib->object_buffer;
 
-    for(i = 0; i < htib->count; ++i)
-	O_DECREF(htib->object_buffer[i]);
+    size_t i;
+    for(i = 0; i < htib->size; ++i, ++iter)
+	O_DECREF(*iter);
 
     free(htib->object_buffer);
     free(htib);
 }
 
-
-/********************************************************************************
+/**********************************************************************
  *
- *  Various other operations 
+ *  Set functions for the hashtables.
  *
- ********************************************************************************/
+ **********************************************************************/
 
-HashTable* Ht_Copy(HashTable* ht)
+ht_rptr Ht_Intersection(ht_crptr ht1, ht_crptr ht2)
 {
-    HashTable *new_ht = NewSizeOptimizedHashTable(Ht_Size(ht));
-    HashObject *hk;
-    HashTableIterator *hti = Hti_New(ht);
+    /* Simply iterate through the two nodes, checking which is
+     * equal. */
 
-    /* Could be optimized a lot. */
+    ht_rptr ht_dest = NewSizeOptimizedHashTable( min(Ht_SIZE(ht1), Ht_SIZE(ht2)) );
     
-    while( (hk = Hti_Next(hti)) != NULL)
-	Ht_Set(new_ht, hk);
+    _HashTableInternalIterator hti1, hti2;
 
-    Hti_Delete(hti);
+    _Hti_INIT(ht1, &hti1);
+    _Hti_INIT(ht2, &hti2);
+
+    HashObject *h1, *h2;
+
+    bool okay = _Hti_NEXT(&h1, &hti1) && _Hti_NEXT(&h2, &hti2);
+
+    if(likely(okay))
+    {
+	while(1)
+	{
+	    while(!H_EQUAL(h1, h2))
+	    {
+		bool h1_first = Hk_LT(H_Hash_RO(h1), H_Hash_RO(h2));
+		if(unlikely(!_Hti_NEXT(h1_first ? &h1 : &h2, h1_first ? &hti1 : &hti2)))
+		    goto HT_INTERSECTION_DONE;
+	    }
+
+	    assert(H_EQUAL(h1, h2));
+
+	    MarkerInfo *mi = Mi_Intersection(H_Mi(h1), H_Mi(h2));
+
+	    if(!Mi_ISEMPTY(mi))
+	    {
+		HashObject * _restrict_ new_h = H_COPY_AS_UNMARKED(NULL, h1);
+		H_GIVE_MARKER_INFO(new_h, mi);
+		_Ht_GiveAppendUnique(ht_dest, new_h);
+	    }
+	    else
+	    {
+		O_DECREF(mi);
+	    }
+
+	    if(unlikely(! (_Hti_NEXT(&h1, &hti1) && _Hti_NEXT(&h2, &hti2))))
+		break;
+	}
+    }
+HT_INTERSECTION_DONE:;
+
+    _Ht_debug_HashTableConsistent(ht_dest);
+    
+    return ht_dest;
+}
+
+ht_rptr Ht_IntersectionUpdate(ht_rptr ht_accumulator, ht_crptr ht_src)
+{
+    if(unlikely(ht_accumulator == NULL))
+	return Ht_Copy(ht_src);
+
+    ht_rptr ht_temp = Ht_Intersection(ht_accumulator, ht_src);
+
+    Ht_SWAP(ht_temp, ht_accumulator);
+
+    O_DECREF(ht_temp);
+    
+    return ht_accumulator;
+}
+
+ht_rptr Ht_Union(ht_crptr ht1, ht_crptr ht2)
+{
+    /* Simply iterate through the two nodes, checking which is
+     * equal. */
+
+    ht_rptr ht_dest = NewSizeOptimizedHashTable( 
+	max(Ht_SIZE(ht1), Ht_SIZE(ht2)) + (min(Ht_SIZE(ht1), Ht_SIZE(ht2)) >> 1));
+    
+    _HashTableInternalIterator hti1, hti2;
+
+    _Hti_INIT(ht1, &hti1);
+    _Hti_INIT(ht2, &hti2);
+
+    HashObject *h1 = NULL, *h2 = NULL;
+
+    if(unlikely(!_Hti_NEXT(&h1, &hti1)))
+	goto HT_FINISH_OUT_H2;
+
+
+    if(unlikely(!_Hti_NEXT(&h2, &hti2)))
+	goto HT_FINISH_OUT_H1;
+
+    while(1)
+    {
+	while(Hk_LT(H_Hash_RO(h1), H_Hash_RO(h2)))
+	{
+	    _Ht_GiveAppendUnique(ht_dest, H_COPY(NULL, h1));
+
+	    if(unlikely(!_Hti_NEXT(&h1, &hti1)))
+		goto HT_FINISH_OUT_H2;
+	}
+
+	while(Hk_LT(H_Hash_RO(h2), H_Hash_RO(h1)))
+	{
+	    _Ht_GiveAppendUnique(ht_dest, H_COPY(NULL, h2));
+
+	    if(unlikely(!_Hti_NEXT(&h2, &hti2)))
+		goto HT_FINISH_OUT_H1;
+	}
+	    
+	if(H_EQUAL(h1, h2))
+	{
+	    MarkerInfo *mi = Mi_Union(H_Mi(h1), H_Mi(h2));
+	    HashObject * _restrict_ new_h = H_COPY_AS_UNMARKED(NULL, h1);
+	    H_GIVE_MARKER_INFO(new_h, mi);
+	    _Ht_GiveAppendUnique(ht_dest, new_h);
+
+	    int h1_okay = likely(_Hti_NEXT(&h1, &hti1)) ? 0 : 1;
+	    int h2_okay = likely(_Hti_NEXT(&h2, &hti2)) ? 0 : 2;
+
+	    switch(likely_value(h1_okay + h2_okay, 0))
+	    {
+	    case 0: continue;
+	    case 1: goto HT_FINISH_OUT_H2;
+	    case 2: goto HT_FINISH_OUT_H1;
+	    case 3: goto HT_UNION_DONE;
+	    default: break;
+	    }
+	}
+    }
+
+    /* Finish out h1. */
+HT_FINISH_OUT_H1:;
+    do{
+	_Ht_GiveAppendUnique(ht_dest, H_COPY(NULL, h1));
+    }while(_Hti_NEXT(&h1, &hti1));
+    goto HT_UNION_DONE;
+
+    /* Finish out h2. */
+HT_FINISH_OUT_H2:;
+    do{
+	_Ht_GiveAppendUnique(ht_dest, H_COPY(NULL, h2));
+    }while(_Hti_NEXT(&h2, &hti2));
+
+    goto HT_UNION_DONE;
+
+HT_UNION_DONE:;
+    
+    _Ht_debug_HashTableConsistent(ht_dest);
+    
+    return ht_dest;
+}
+
+ht_rptr Ht_UnionUpdate(ht_rptr ht_accumulator, ht_crptr ht_src)
+{
+    if(unlikely(ht_accumulator == NULL))
+	return Ht_Copy(ht_src);
+
+    ht_rptr ht_temp = Ht_Union(ht_accumulator, ht_src);
+
+    Ht_SWAP(ht_temp, ht_accumulator);
+
+    O_DECREF(ht_temp);
+    
+    return ht_accumulator;
+}
+
+ht_rptr Ht_DifferenceUpdate(ht_rptr ht1, ht_crptr ht2)
+{
+    if(unlikely(ht1 == NULL))
+	return NewHashTable();
+
+    /* Clear out the msl if needed. */
+    if(ht1->marker_sl != NULL)
+	_Ht_MSL_Drop(ht1);
+
+    _ht_node_rptr target_node, base_node;
+    unsigned int node_idx; 
+    HashObject *target_h;
+
+    _HashTableInternalIterator hti;
+    HashObject *h1;
+    _Hti_INIT(ht2, &hti);
+
+    while(_Hti_NEXT(&h1, &hti) )
+    {
+	bool found = _Ht_Table_Find(&target_node, &node_idx, &base_node, 
+				    &target_h, ht1, *H_Hash_RO(h1));
+	
+	if(!found)
+	    continue;
+
+	MarkerInfo *new_mi = Mi_Difference(H_Mi(target_h), H_Mi(h1));
+	
+	if(Mi_ISEMPTY(new_mi))
+	{
+	    _Ht_Table_Delete(target_node, base_node, node_idx, target_h);
+	    _Ht_Deletion_Bookkeeping(ht1, target_h, true);
+	}
+	else
+	{
+	    H_GIVE_MARKER_INFO(target_h, new_mi);
+	}
+    }
+
+    return ht1;
+}
+
+ht_rptr Ht_Difference(ht_crptr ht1, ht_crptr ht2)
+{
+    HashTable *ht = Ht_Copy(ht1);
+    return Ht_DifferenceUpdate(ht, ht2);
+}
+
+void Ht_Swap(ht_rptr ht1, ht_rptr ht2)
+{
+    Ht_SWAP(ht1, ht2);
+}
+
+ht_rptr Ht_KeySet(ht_rptr ht)
+{
+    ht_rptr new_ht = NewSizeOptimizedHashTable(Ht_Size(ht));
+    HashObject *h;
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+
+    while(_Hti_NEXT(&h, &hti))
+	_Ht_GiveAppendUnique(new_ht, H_COPY_AS_UNMARKED(NULL, h));
 
     return new_ht;
 }
 
+
 /********************************************************************************
  *
- *  Hash Table Merging Operations.
+ *  Iterators for the HashTable Marker stuff.
  *
  ********************************************************************************/
 
-HashTable *Ht_ReduceTable(HashTable *ht)
+DEFINE_GLOBAL_MEMORY_POOL(HashTableMarkerIterator);
+
+HashTableMarkerIterator* Htmi_New(HashTable *ht)
 {
-    assert(ht != NULL);
+    HashTableMarkerIterator *htmi = Mp_NewHashTableMarkerIterator();
 
-    _HT_MarkerSkipList *msl = ht->marker_sl;
-    HashTable *rht = NewHashTable();
+    O_INCREF(ht);
 
-    if(unlikely(msl == NULL))
-    {
-	_Ht_debug_HashTableConsistent(rht);
-	_Ht_debug_HashTableConsistent(ht);
-
-	_Ht_MSL_Init(ht);
-	HashObject *h = ALLOCATEHashObject();
-	Hf_COPY_FROM_KEY(h, &(ht->marker_sl->unmarked_object_hash));
-	H_AddMarkerValidRange(h, MARKER_MINUS_INFTY, MARKER_PLUS_INFTY);
-	Ht_Give(rht, h);
-
-	return rht;
-    }
-
-    /* Now just walk through the marker list, adding the hash between
-     * each subsequent node. */
-
-#if (RUN_CONSISTENCY_CHECKS == 1)
-    HashObject *temp_h = ALLOCATEHashObject();
-#endif
-
-    HashObject *running_h = ALLOCATEHashObject();
-    Hf_COPY_FROM_KEY(running_h, &msl->unmarked_object_hash);
-
-    _HT_MSL_Node *next_leaf;
-    _HT_MSL_Node *cur_leaf = (_HT_MSL_Node *)msl->first_leaf;
-
-    markertype cur_m, next_m;
-
-    do{
-	cur_m = cur_leaf->marker;
-	Hk_REDUCE_UPDATE(H_Hash_RW(running_h), &(cur_leaf->hk));
-
-#if (RUN_CONSISTENCY_CHECKS == 1)
-
-	if(!H_Equal(Ht_HashAtMarkerPoint(temp_h, ht, cur_m), running_h))
-	{
-	    fprintf(stderr, "\n\n##############\nMarker point = %ld", cur_m);
-	    Ht_debug_print(ht);
-	    Ht_MSL_debug_Print(ht);
-	    abort();
-	}
-#endif
-	next_leaf = cur_leaf->next;
-
-	if(next_leaf == NULL)
-	    next_m = MARKER_PLUS_INFTY;
-	else
-	    next_m = next_leaf->marker;
-
-	/* See if there is a key present with the current hash.  If
-	 * so, then add this one to it.  If not, then create a new
-	 * one. */
-
-	HashObject *h = Ht_Pop(rht, running_h);
-	    
-	if(likely(h == NULL))
-	{
-	    h = ALLOCATEHashObject();
-	    Hk_COPY(H_Hash_RW(h), H_Hash_RO(running_h));
-	}
-	else
-	{
-	    assert(O_REF_COUNT(h) == 1);
-	    assert(!H_IsLocked(h));
-	}
-
-	H_AddMarkerValidRange(h, cur_m, next_m);
-	Ht_Give(rht, h);
-       
-	cur_leaf = next_leaf;
-
-#if (RUN_CONSISTENCY_CHECKS == 1)
-	_Ht_debug_HashTableConsistent(rht);
-	_Ht_debug_HashTableConsistent(ht);
-#endif
-
-    }while(cur_leaf != NULL);
-    
-#if (RUN_CONSISTENCY_CHECKS == 1)
-    _Ht_debug_HashTableConsistent(rht);
-    _Ht_debug_HashTableConsistent(ht);
-
-    O_DECREF(temp_h);
-#endif
-
-    O_DECREF(running_h);
-
-    return rht;
+    Htmi_INIT(ht, htmi);
+    return htmi;
 }
 
-void __Ht_HAMV_SetKeyInRHT(HashTable *ht_accumulator, HashObject *h)
-{
-    HashObject *present_hash = Ht_Pop(ht_accumulator, h);
 
-    if(present_hash == NULL)
+inline void Htmi_Finish(HashTableMarkerIterator* htmi)
+{
+    O_DECREF(htmi->ht);
+    Mp_FreeHashTableMarkerIterator(htmi);
+}
+
+
+/********************************************************************************
+ *
+ *  Now functions for working on the HashSequence stuff.
+ *
+ ********************************************************************************/
+
+void _Hs_Constructor(HashSequence* hs)
+{
+    hs->end_node = &(hs->nodes);
+    hs->size = 1;
+    hs->nodes.size = 1;
+
+    /* Sets marker minus infty hash to 0; may be updated. */
+    hs->nodes.items[0].marker = MARKER_MINUS_INFTY;
+}
+
+void _Hs_Destructor(HashSequence* hs)
+{
+    _HS_Node* dealloc_start = hs->nodes.next;
+    _HS_Node* dealloc_x;
+
+    while(dealloc_start != NULL) {
+	dealloc_x = dealloc_start;
+	dealloc_start = dealloc_start->next;
+	Mp_Free_HS_Node(dealloc_x);
+    }
+}
+
+DEFINE_OBJECT(
+    /* Name. */     HashSequence,
+    /* BaseType */  Object,
+    /* construct */ _Hs_Constructor,
+    /* delete */    _Hs_Destructor,
+    /* Duplicate */ NULL);
+
+DEFINE_GLOBAL_MEMORY_POOL(_HS_Node);
+
+/* Now the iterator stuff to go along with it. */
+
+DEFINE_GLOBAL_MEMORY_POOL(HashSequenceIterator);
+
+inline HashSequenceIterator* Hsi_New(HashSequence *hs)
+{
+    HashSequenceIterator *hsi = Mp_NewHashSequenceIterator();
+
+    Hsi_INIT(hs, hsi);
+    
+    O_INCREF(hs);
+
+    return hsi;
+}
+
+bool Hsi_Next(HashValidityItem *hvi, HashSequenceIterator* hsi)
+{
+    return Hsi_NEXT(hvi, hsi);
+}
+
+void Hsi_Finish(HashSequenceIterator* hsi)
+{
+    O_DECREF(hsi->hs);
+    Mp_FreeHashSequenceIterator(hsi);
+}
+
+static inline void _Hs_Append(HashSequence *hs, markertype m, HashKey *hk_ptr)
+{
+    _HS_Node *end_node = hs->end_node;
+
+    assert(hs->size >= 1);
+    assert(end_node->size >= 1);
+
+    if(unlikely(Hk_EQUAL(hk_ptr, &(end_node->items[end_node->size - 1].hk))))
+	return;
+
+    if(unlikely(end_node->items[end_node->size - 1].marker == m))
     {
-	if(!Mi_IsEmpty(h->mi))
-	    Ht_Give(ht_accumulator, h);
+	end_node->items[end_node->size-1].hk = *hk_ptr;
+	return;
+    }
+
+    if(unlikely(end_node->size == _HS_NODE_SIZE))
+    {
+	/* Put it on the next one. */
+	assert(end_node->next == NULL);
+	hs->end_node = end_node = (end_node->next = Mp_New_HS_Node());
+	end_node->size = 1;
+	end_node->items[0].hk = *hk_ptr;
+	end_node->items[0].marker = m;
+	++(hs->size);
     }
     else
     {
-	/* Need to do some tricky business to work with possible
-	 * duplication. */
-	
-	//assert(O_RefCount(present_hash) == 2); /* One ours + one in iterator buffer. */
-	assert(!H_IsLocked(present_hash));
-    
-	MarkerInfo *mi_present = present_hash->mi;
-	MarkerInfo *mi_new = h->mi;
-
-	MarkerInfo *mi_single = Mi_SymmetricDifference(mi_present, mi_new);
-	MarkerInfo *mi_double = Mi_Intersection(mi_present, mi_new);
-
-	assert(!Mi_ISEMPTY(mi_present));
-	assert(!Mi_ISEMPTY(mi_new));
-	    
-	assert(! (Mi_ISEMPTY(mi_single) && Mi_ISEMPTY(mi_double)) );
-
-	if(likely(!Mi_ISEMPTY(mi_single)))
-	{
-	    H_GiveMarkerInfo(present_hash, mi_single);
-	    Ht_Give(ht_accumulator, present_hash);
-	}
-
-	if(unlikely(!Mi_ISEMPTY(mi_double)))
-	{
-	    /* Need to recursively add it to ensure that we aren't
-	     * overwriting something again. */
-
-	    HashObject *h_double = H_Reduce(NULL, h, h);
-	    H_GiveMarkerInfo(h_double, mi_double);
-	    __Ht_HAMV_SetKeyInRHT(ht_accumulator, h_double);
-
-	}
+	assert(end_node->size < _HS_NODE_SIZE);
+	end_node->items[end_node->size].hk = *hk_ptr;
+	end_node->items[end_node->size].marker = m;
+	++(end_node->size);
+	++(hs->size);
     }
 }
 
-HashTable *Ht_Summarize_Add(HashTable *ht_accumulator, HashTable *ht)
+HashSequence* Hs_FromHashTable(HashTable *ht)
 {
-    /* Adds a new hash table to a hashing along accumulator values.
-     * 
-     */
+    assert(ht != NULL);
 
-    HashTable *marker_ht = Ht_ReduceTable(ht);
+    HashSequence *hs = ConstructHashSequence();
 
+    HashTableMarkerIterator *htmi = Htmi_New(ht);
+    HashValidityItem hvi;
+    
+    while(Htmi_NEXT(&hvi, htmi))
+	_Hs_Append(hs, hvi.start, &(hvi.hk));
+
+    Htmi_Finish(htmi);
+
+    return hs;
+}
+
+static inline void _Hs_Swap(HashSequence* _restrict_ hs1, HashSequence* _restrict_ hs2)
+{    
+    if(unlikely(hs1 == hs2)) return;
+
+    _HS_Node* end_node = hs1->end_node;
+    hs1->end_node  = hs2->end_node;
+    hs2->end_node  = end_node;
+
+    _HS_Node temp_node;
+    /* Swap the node block. */
+    memcpy(&temp_node,     &(hs1->nodes), sizeof(_HS_Node));
+    memcpy(&(hs1->nodes), &(hs2->nodes),  sizeof(_HS_Node));
+    memcpy(&(hs2->nodes), &temp_node,     sizeof(_HS_Node));
+}
+
+void Hs_debug_print(HashSequence *hs)
+{
+    HashSequenceIterator hsi;
+    Hsi_INIT(hs, &hsi);
+    
+    HashValidityItem hvi;
+
+    printf("Hash Sequence = \n");
+
+    while(Hsi_NEXT(&hvi, &hsi)) 
+    {
+	printf("[%ld, %ld): ", hvi.start, hvi.end);
+	Hk_debug_PrintHash(&hvi.hk);
+	printf("\n");
+    }
+}
+
+typedef void (*hash_combine_func)(hk_ptr, chk_ptr, chk_ptr);
+
+static inline HashSequence* _restrict_ _Hs_Update(
+    HashSequence* _restrict_ hs, HashTable *ht, hash_combine_func hash_func)
+{
+    if(unlikely(hs == NULL))
+	return Hs_FromHashTable(ht);
+
+    HashSequence * _restrict_ hs_dest;
+    
+    if(unlikely(hs->size == 0))
+    {
+	hs_dest = Hs_FromHashTable(ht);
+	_Hs_Swap(hs, hs_dest);
+	O_DECREF(hs_dest);
+	return hs;
+    }
+
+    assert(ht != NULL);
+
+    hs_dest = ConstructHashSequence();
+
+    HashTableMarkerIterator htmi;
+    Htmi_INIT(ht, &htmi);
+    HashValidityItem ht_hvi;
+    Htmi_NEXT(&ht_hvi, &htmi);
+
+    HashSequenceIterator hsi;
+    Hsi_INIT(hs, &hsi);
+    HashValidityItem hs_hvi;
+    Hsi_NEXT(&hs_hvi, &hsi);
+
+    assert(ht_hvi.start == MARKER_MINUS_INFTY);
+    assert(hs_hvi.start == MARKER_MINUS_INFTY);
+
+    markertype cur_m = MARKER_MINUS_INFTY;
+
+    HashKey insert_hash;
+    /* printf(">>>>>>>>>>>>>>>>>>>>>>>>>Init: \ncur_m = %ld, ht = [%ld, %ld), hs = [%ld, %ld)\n", */
+    /* 	   cur_m, ht_hvi.start, ht_hvi.end, hs_hvi.start, hs_hvi.end); */
+    
+
+    while(true)
+    {
+	assert(cur_m >= ht_hvi.start);
+	assert(cur_m < ht_hvi.end);
+	assert(cur_m >= hs_hvi.start);
+	assert(cur_m < hs_hvi.end);
+
+	hash_func(&insert_hash, &(hs_hvi.hk), &(ht_hvi.hk));
+	_Hs_Append(hs_dest, cur_m, &insert_hash);
+
+	/* printf("Appending at %ld: ", cur_m); */
+	/* Hk_debug_PrintHash(&insert_hash); */
+	/* printf("From: \nhs = "); */
+	/* Hk_debug_PrintHash(&(hs_hvi.hk)); */
+	/* printf("ht = "); */
+	/* Hk_debug_PrintHash(&(ht_hvi.hk)); */
+
+	/* Now advance the current marker location to the next part. */
+
+	cur_m = min(ht_hvi.end, hs_hvi.end);
+
+	/* printf("1: \ncur_m = %ld, ht = [%ld, %ld), hs = [%ld, %ld)\n", */
+	/*    cur_m, ht_hvi.start, ht_hvi.end, hs_hvi.start, hs_hvi.end); */
+
+	if(unlikely(cur_m == MARKER_PLUS_INFTY))
+	    break;
+
+	if(ht_hvi.end <= cur_m)
+	{
+	    Htmi_NEXT(&ht_hvi, &htmi);
+
+	    /* printf("2: \ncur_m = %ld, ht = [%ld, %ld), hs = [%ld, %ld)\n", */
+	    /* 	   cur_m, ht_hvi.start, ht_hvi.end, hs_hvi.start, hs_hvi.end); */
+
+	    assert(ht_hvi.start <= cur_m);
+	    assert(cur_m < ht_hvi.end);
+	}
+
+	if(hs_hvi.end <= cur_m)
+	{
+	    Hsi_NEXT(&hs_hvi, &hsi);
+
+	    /* printf("3: \ncur_m = %ld, ht = [%ld, %ld), hs = [%ld, %ld)\n", */
+	    /* 	   cur_m, ht_hvi.start, ht_hvi.end, hs_hvi.start, hs_hvi.end); */
+
+	    assert(hs_hvi.start <= cur_m);
+	    assert(cur_m < hs_hvi.end);
+	}
+    }
+
+    _Hs_Swap(hs, hs_dest);
+    O_DECREF(hs_dest);
+
+    return hs;
+}
+
+
+/* Now the utilizing functions. */
+
+void _Hs_IntersectionFunction(hk_ptr hk_dest, chk_ptr hk1, chk_ptr hk2)
+{
+    if(Hk_EQUAL(hk1, hk2))
+	Hk_COPY(hk_dest, hk1);
+    else
+	Hk_CLEAR(hk_dest);
+}
+
+HashSequence* Hs_HashTableIntersectionUpdate(HashSequence* hs, HashTable *ht)
+{
+    if(hs == NULL)
+	return Hs_FromHashTable(ht);
+    else
+	return _Hs_Update(hs, ht, _Hs_IntersectionFunction);
+}
+
+MarkerInfo* Hs_NonZeroSet(HashSequence* hs)
+{
+    assert(hs != NULL);
+
+    HashSequenceIterator *hsi = Hsi_New(hs);
+    HashValidityItem hvi;
+    MarkerInfo *mi = Mi_New(0,0);
+
+    while(Hsi_NEXT(&hvi, hsi))
+    {
+	if(!Hk_ISZERO(&(hvi.hk)))
+	    Mi_AppendValidRange(mi, hvi.start, hvi.end);
+    }
+
+    return mi;
+}
+
+HashTable* Hs_ToHashTable(HashSequence *hs)
+{
+    assert(hs != NULL);
+
+    if(unlikely(hs->size == 0))
+	return NewHashTable();
+
+    HashTable *ht = NewSizeOptimizedHashTable(hs->size);
+
+    HashSequenceIterator hsi;
+    Hsi_INIT(hs, &hsi);
+
+    HashValidityItem hvi;
+    
+    while(Hsi_NEXT(&hvi, &hsi))
+    {
+	if(!Hk_ISZERO(&(hvi.hk)))
+	{
+	    HashObject *h = Ht_ViewByKey(ht, hvi.hk);
+
+	    if(h == NULL)
+	    {
+		HashObject *new_k = ALLOCATEHashObject();
+		Hk_COPY(H_Hash_RW(new_k), &hvi.hk);
+		H_GIVE_MARKER_INFO(new_k, Mi_New(hvi.start, hvi.end));
+		Ht_Give(ht, new_k);
+	    }
+	    else
+	    {
+		Mi_AppendValidRange(H_Mi(h), hvi.start, hvi.end);
+	    }
+	}
+    }
+
+    return ht;
+}
+
+/********************************************************************************
+ *
+ *   Now the update and reduce functions (as these depend on the
+ *   summarizing stuff above.
+ *
+ ********************************************************************************/
+void _Hs_SummarizeFunction(hk_ptr hk_dest, chk_ptr hs_hk, chk_ptr ht_hk)
+{
+    HashKey hk;
+    Hk_REHASH(&hk, ht_hk);
+    Hk_REDUCE(hk_dest, hs_hk, &hk);
+}
+
+HashSequence *Ht_Summarize_Update(HashSequence *ht_accumulator, HashTable *ht)
+{    
     if(unlikely(ht_accumulator == NULL))
     {
-	ht_accumulator = NewHashTable();
-    }
+	HashSequence *hs = ConstructHashSequence();
 
-    assert(O_RefCount(marker_ht) == 1);
+	HashTableMarkerIterator htmi;
+	Htmi_INIT(ht, &htmi);
+	HashValidityItem hvi;
 
-    HashTableIterator *hti = Hti_New(marker_ht);
-    HashObject *h;
-
-    while( (h = Hti_Next(hti)) != NULL)
-	__Ht_HAMV_SetKeyInRHT(ht_accumulator, H_Rehash(NULL, h));
-
-    O_DECREF(marker_ht);
-    
-    Hti_Delete(hti);
-
-    return ht_accumulator;
-}
-
-HashTable* Ht_Summarize_Finish(HashTable *ht_accumulator)
-{
-    HashTable *marker_ht = Ht_ReduceTable(ht_accumulator);
-
-    HashTable *dest_ht = NewHashTable();
-
-    HashObject *h;
-
-    HashTableIterator *hti = Hti_New(marker_ht);
-
-    while( (h = Hti_Next(hti)) != NULL)
-	Ht_Give(dest_ht, H_Rehash(NULL, h));
-
-    O_DECREF(marker_ht);
-    
-    Hti_Delete(hti);
-    O_DECREF(ht_accumulator);
-
-    return dest_ht;
-}
-
-HashObject* Ht_HashOfEverything(HashObject* h_dest, HashTable *ht)
-{
-    if(h_dest == NULL)
-	h_dest = NewHashObject();
-
-    H_Clear(h_dest);
-
-    _HT_MarkerSkipList *msl = ht->marker_sl;
-
-    if(unlikely(msl == NULL))
-    {
-	_Ht_MSL_Init(ht);
-	Hf_COPY_FROM_KEY(h_dest, &(ht->marker_sl->unmarked_object_hash));
-	return h_dest;
-    }
-
-    /* Now just walk through the marker list, adding the hash between
-     * each subsequent node. */
-
-    Hf_COPY_FROM_KEY(h_dest, &msl->unmarked_object_hash);
-
-    _HT_MSL_Node *cur_leaf = (_HT_MSL_Node *)(msl->first_leaf);
-
-    assert(cur_leaf != NULL);
-
-    do{
-	if(!Hk_ISZERO(&(cur_leaf->hk)))
+	while(Htmi_NEXT(&hvi, &htmi))
 	{
-	    Hk_InplaceCombine(H_Hash_RW(h_dest), &(cur_leaf->hk));
-	    Hk_UpdateWithInt(H_Hash_RW(h_dest), cur_leaf->marker);
+	    /* printf("\n[%ld, %ld): ", hvi.start, hvi.end); */
+
+	    HashKey hk = hvi.hk;
+	    /* printf("htmi="); */
+	    /* Hk_debug_PrintHash(&hk); */
+
+	    Hk_INPLACE_REHASH(&hk);
+
+	    /* printf("rehash="); */
+	    /* Hk_debug_PrintHash(&hk); */
+
+	    _Hs_Append(hs, hvi.start, &hk);
 	}
+	
+	/* printf("\nFirst sumarize hs = \n"); */
+	/* Hs_debug_print(hs); */
 
-	cur_leaf = cur_leaf->next;
-    }while(cur_leaf != NULL && cur_leaf->marker != MARKER_PLUS_INFTY);
-
-    return h_dest;
+	return hs;
+    }
+    else
+    {
+	return _Hs_Update(ht_accumulator, ht, _Hs_SummarizeFunction);
+    }
 }
+
+HashTable *Ht_Summarize_Finish(HashSequence *hs)
+{
+    assert(hs != NULL);
+
+    if(unlikely(hs->size == 0))
+	return NewHashTable();
+
+    HashTable *ht = NewSizeOptimizedHashTable(hs->size);
+
+    HashSequenceIterator hsi;
+    Hsi_INIT(hs, &hsi);
+
+    HashValidityItem hvi;
+    
+    /* printf("\nAdding in:"); */
+
+    while(Hsi_NEXT(&hvi, &hsi))
+    {
+	if(!Hk_ISZERO(&(hvi.hk)))
+	{
+	    HashKey hk;
+	    Hk_REHASH(&hk, &hvi.hk);
+	    HashObject *_restrict_ h = Ht_ViewByKey(ht, hk);
+
+	    if(h == NULL)
+	    {
+		/* printf("\nNew: [%ld, %ld): ", hvi.start, hvi.end); */
+		/* Hk_debug_PrintHash(&hk); */
+
+		HashObject * _restrict_ new_k = ALLOCATEHashObject();
+
+		Hk_COPY(H_Hash_RW(new_k), &hk);
+		H_GIVE_MARKER_INFO(new_k, Mi_New(hvi.start, hvi.end));
+		/* printf("\n it's this: "); */
+		/* H_debug_print(new_k); */
+		Ht_Give(ht, new_k);
+
+		// printf("\nhash table: \n");
+		//Ht_debug_Print(ht);
+	    }
+	    else
+	    {
+		/* printf("\nUpd: [%ld, %ld): ", hvi.start, hvi.end); */
+		/* Hk_debug_PrintHash(&hk); */
+
+		Mi_AppendValidRange(H_Mi(h), hvi.start, hvi.end);
+
+		// printf("\nhash table: \n");
+		// Ht_debug_Print(ht);
+	    }
+	}
+    }
+
+    _Ht_debug_HashTableConsistent(ht);
+
+    /* printf("Final hash table: \n"); */
+
+    /* Ht_debug_Print(ht); */
+    
+    return ht;
+}
+
+HashTable *Ht_ReduceTable(HashTable *ht)
+{
+    HashTable *ht_dest = NewHashTable();
+    HashTableMarkerIterator *htmi = Htmi_New(ht);
+    HashValidityItem hvi;
+    
+    while(Htmi_NEXT(&hvi, htmi))
+    {
+	if(!Hk_ISZERO(&(hvi.hk)))
+	{
+	    HashObject *h = ALLOCATEHashObject();
+	    Hf_COPY_FROM_KEY(h, &(hvi.hk));
+	    _Ht_InsertValidNonOverlappingRange(ht_dest, h, hvi.start, hvi.end);
+	}
+    }
+
+    return ht_dest;
+}
+
+
+/********************************************************************************
+ *
+ *  More testing things
+ *
+ ********************************************************************************/
+
+HashSequence* Ht_EqualitySetUpdate(HashSequence *accumulator, HashTable *ht)
+{
+    return Hs_HashTableIntersectionUpdate(accumulator, ht);
+}
+
+MarkerInfo* Ht_EqualitySetFinish(HashSequence *accumulator)
+{
+    MarkerInfo *mi = Hs_NonZeroSet(accumulator);
+    O_DECREF(accumulator);
+    return mi;
+}
+    
+MarkerInfo* Ht_EqualitySet(HashTable *ht1, HashTable *ht2)
+{
+    HashSequence* hs = Ht_EqualitySetUpdate(NULL, ht1);
+    Ht_EqualitySetUpdate(hs, ht2);
+    return Ht_EqualitySetFinish(hs);
+}
+

@@ -3,27 +3,27 @@ Loads files of the various formats for testing purposes.
 """
 
 from common import *
-from dglcreation import *
+from ibdcreation import *
 from itertools import *
 import re
 
 def parseFile(filename):
     """
-    Parses a file and returns a list of dgl graph objects, each having
+    Parses a file and returns a list of ibd graph objects, each having
     only one reference count. 
     """
     
-    if filename.endswith('.dglf1'):
+    if filename.endswith('.ibdf1'):
         return parse_F1_file(filename)
     else:
         raise ValueError("Format of file not recognized.")
 
 def parse_F1_file(filename):
     f = open(filename)
-    dgl_list = parse_F1_string(f.read())
+    ibd_list = parse_F1_string(f.read())
     f.close()
     
-    return dgl_list
+    return ibd_list
 
 
 def parse_F1_string(string):
@@ -55,7 +55,7 @@ def parse_F1_string(string):
         
     # Now parse the file
     working_set = None
-    dgl_graphs = []
+    ibd_graphs = []
     cur_pos = 0
     n_groups = 0
 
@@ -76,16 +76,16 @@ def parse_F1_string(string):
             
         cur_pos += len(working_set)
         
-        dgl_graphs.append(createDGLGraph(connections))
+        ibd_graphs.append(createIBDGraph(connections))
 
-    print "Loaded %d graphs." % len(dgl_graphs)
+    print "Loaded %d graphs." % len(ibd_graphs)
 
-    return dgl_graphs
+    return ibd_graphs
 
 def parse_F1_line(l, pos):
     try:
-        line_parse = r"\s*(?P<edge>\w+)\s+(?P<dgl_0>\w+)\s+(?P<dgl_1>\w+)\s+(?P<change_count>\d+)"
-        changes_parse = r"\s*(?P<change_pos>\d+)\s+(?P<dgl>\w+)\s*"
+        line_parse = r"\s*(?P<edge>\w+)\s+(?P<ibd_0>\w+)\s+(?P<ibd_1>\w+)\s+(?P<change_count>\d+)"
+        changes_parse = r"\s*(?P<change_pos>\d+)\s+(?P<ibd>\w+)\s*"
 
         m = re.match(line_parse, l)
 
@@ -93,8 +93,8 @@ def parse_F1_line(l, pos):
             raise Exception("Parse Error; pattern not recognized (line = %s)" % l)
 
         edge = m.group('edge')
-        dgl_0 = m.group('dgl_0')
-        dgl_1 = m.group('dgl_1')
+        ibd_0 = m.group('ibd_0')
+        ibd_1 = m.group('ibd_1')
         changes = []
 
         change_count = int(m.group('change_count'))
@@ -108,9 +108,9 @@ def parse_F1_line(l, pos):
 
             l = l[m.end():]
 
-            changes.append( (m.group('dgl'), int(m.group('change_pos'))) )
+            changes.append( (m.group('ibd'), int(m.group('change_pos'))) )
 
-        return [edge, dgl_0, [(dgl_1, 1)] + changes] 
+        return [edge, ibd_0, [(ibd_1, 1)] + changes] 
 
     except Exception, e:
         raise Exception("Parse error on line %d: %s" % (pos, str(e)))

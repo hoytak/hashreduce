@@ -10,6 +10,8 @@
 
 #include <stdint.h>
 #include "brg_endian.h"
+#include "optimizations.h"
+#include "debugging.h"
 
 typedef unsigned long int bitfield;
 
@@ -101,21 +103,6 @@ static inline unsigned int b64high(uint64_t v)
 }
 
 
-static inline int getFirstBitOn(bitfield bf)
-{
-    int i;
-    for(i = 0; i < bitsizeof(bitfield); ++i)
-	if(bf & LeftShift(1, i)) 
-	    return i;
-
-    return -1;
-}
-
-static inline int getFirstBitOff(bitfield bf)
-{
-    return getFirstBitOn(~bf);
-}
-
 static inline int getFirstBitOnFromPos(bitfield bf, int first_possible_bit)
 {
     int i;
@@ -127,6 +114,29 @@ static inline int getFirstBitOnFromPos(bitfield bf, int first_possible_bit)
     }
     
     return -1;
+}
+
+static inline int getFirstBitOn(bitfield bf)
+{
+/* Need to really use __builtin_cfzl. */
+
+    if(unlikely(bf == 0))
+	return -1;
+
+    bf = ~bf;
+
+    int ret = 0;
+
+    for(; bf & 1; ++ret, bf >>= 1);
+
+    assert(ret == getFirstBitOnFromPos(bf, 0));
+
+    return ret;
+}
+
+static inline int getFirstBitOff(bitfield bf)
+{
+    return getFirstBitOn(~bf);
 }
 
 #endif 

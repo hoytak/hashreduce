@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 """
-Tests the basics dgl routines.
+Tests the basics ibd routines.
 """
 
 import unittest
 
 from common import *
-from dglcreation import *    
+from ibdcreation import *    
 from parsers import *
 from random import shuffle
 from pprint import pprint
 
-class TestDGLLabelReference(unittest.TestCase):
+class TestIBDLabelReference(unittest.TestCase):
 
     def checkConsistent(self, g, f, d):
         l = [e for e in d]
@@ -36,23 +36,23 @@ class TestDGLLabelReference(unittest.TestCase):
         self.assert_(len(set(h_d.values())) == len(h_d))
 
     def test_01_Node_Number_Single(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.assert_(getNode(g, 0) == getNode(g, 0))
 
     def test_02_Node_Name_Single(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.assert_(getNode(g, "n") == getNode(g, "n"))
 
     def test_03_Edge_Number_Single(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.assert_(getEdge(g, 0) == getEdge(g, 0))
 
     def test_04_Edge_Name_Single(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.assert_(getEdge(g, "n") == getEdge(g, "n"))
 
     def test_05_Node_Number_Double(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         n0 = getNode(g, 0)
         n1 = getNode(g, 1)
 
@@ -61,7 +61,7 @@ class TestDGLLabelReference(unittest.TestCase):
             self.assert_(getNode(g, 1) == getNode(g, 1) == n1)
 
     def test_06_Node_Name_Double(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         n0 = getNode(g, "n0")
         n1 = getNode(g, "n1")
 
@@ -70,7 +70,7 @@ class TestDGLLabelReference(unittest.TestCase):
             self.assert_(getNode(g, "n1") == getNode(g, "n1") == n1)
 
     def test_07_Edge_Number_Double(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         n0 = getEdge(g, 0)
         n1 = getEdge(g, 1)
 
@@ -79,7 +79,7 @@ class TestDGLLabelReference(unittest.TestCase):
             self.assert_(getEdge(g, 1) == getEdge(g, 1) == n1)
 
     def test_08_Edge_Name_Double(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         n0 = getEdge(g, "e0")
         n1 = getEdge(g, "e1")
 
@@ -88,46 +88,46 @@ class TestDGLLabelReference(unittest.TestCase):
             self.assert_(getEdge(g, "e1") == getEdge(g, "e1") == n1)
         
     def test_11_Node_Number(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.checkConsistent(g, getNode, range(-10,10))
-        delDGL(g)
+        delIBD(g)
 
     def test_12_Node_Name(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.checkConsistent(g, getNode, [("n%d" % n) for n in range(-10,10)])
-        delDGL(g)
+        delIBD(g)
 
     def test_13_Node_Mix(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.checkConsistent(g, getNode, [("n%d" % n) for n in range(-10,10)] + range(-10,10))
-        delDGL(g)
+        delIBD(g)
 
     def test_14_Edge_Number(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.checkConsistent(g, getEdge, range(-10,10))
-        delDGL(g)
+        delIBD(g)
 
     def test_15_Edge_Name(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.checkConsistent(g, getEdge, [("n%d" % n) for n in range(-10,10)])
-        delDGL(g)
+        delIBD(g)
 
     def test_16_Edge_Mix(self):
-        g = newDGLGraph()
+        g = newIBDGraph()
         self.checkConsistent(g, getEdge, [("n%d" % n) for n in range(-10,10)] + range(-10,10))
-        delDGL(g)
+        delIBD(g)
         
 
 
 
-class TestDGLComparisons(unittest.TestCase):
+class TestIBDComparisons(unittest.TestCase):
     
-    def checkDGLComparison(self, d1, d2, equality_set, inequality_set):
+    def checkIBDComparison(self, d1, d2, equality_set, inequality_set):
         
         wrongly_inequal = [m for m in equality_set 
-                           if not dglSameAtMarker(d1, d2, m)]
+                           if not ibdSameAtMarker(d1, d2, m)]
         wrongly_equal = [m for m in inequality_set 
-                         if dglSameAtMarker(d1, d2, m)]
+                         if ibdSameAtMarker(d1, d2, m)]
 
         assert len(wrongly_equal) == 0 and len(wrongly_inequal) == 0,\
             "Wrongly Equal: %s; Wrongly Inequal: %s" \
@@ -137,179 +137,228 @@ class TestDGLComparisons(unittest.TestCase):
 
     def test_01_2NodeSanity(self):
         
-        d1 = createDGLGraph([("e", "n1", []),
+        d1 = createIBDGraph([("e", "n1", []),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [])])
 
-        self.checkDGLComparison(d1, d2, range(10), [])
+        self.checkIBDComparison(d1, d2, range(10), [])
 
     def test_02_2NodeSanity_FullCompare(self):
         
-        d1 = createDGLGraph([("e", "n1", []),
+        d1 = createIBDGraph([("e", "n1", []),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [])])
 
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_03_3NodeSanity(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d2 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        self.checkDGLComparison(d1, d2, range(10), [])
+        self.checkIBDComparison(d1, d2, range(10), [])
 
     def test_04_3NodeSanity_FullCompare(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d2 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_05_3NodeSanity_rev(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [("n3", 2)])])
 
-        self.checkDGLComparison(d1, d2, range(10), [])
+        self.checkIBDComparison(d1, d2, range(10), [])
 
     def test_06_3NodeSanity_rev_FullCompare(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [("n3", 2)])])
 
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_07_3Node_Switch(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)]), 
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)]), 
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n1", [("n3", 4)]),
+        d2 = createIBDGraph([("e", "n1", [("n3", 4)]),
                              ("e", "n2", [])])
 
-        self.checkDGLComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_07_3Node_Switch_Simplest(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)])])
-        d2 = createDGLGraph([("e", "n1", [("n3", 4)])])
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)])])
+        d2 = createIBDGraph([("e", "n1", [("n3", 4)])])
 
-        self.checkDGLComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_07_3Node_Switch_rev(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n3", 2)]),
+        d1 = createIBDGraph([("e", "n1", [("n3", 2)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [("n3", 4)])])
 
-        self.checkDGLComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_08_1Node_Continuity(self):
-        d1 = createDGLGraph([("e", "n1", [("n1", 4)])])
-        d2 = createDGLGraph([("e", "n2", [])])
+        d1 = createIBDGraph([("e", "n1", [("n1", 4)])])
+        d2 = createIBDGraph([("e", "n2", [])])
         
-        self.checkDGLComparison(d1, d2, range(-10,10), [])
+        self.checkIBDComparison(d1, d2, range(-10,10), [])
 
     def test_09_1Node_Continuity_FullCompare(self):
-        d1 = createDGLGraph([("e", "n1", [("n1", 4)])])
-        d2 = createDGLGraph([("e", "n2", [])])
+        d1 = createIBDGraph([("e", "n1", [("n1", 4)])])
+        d2 = createIBDGraph([("e", "n2", [])])
         
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_10_2Node_2Edge(self):
 
-        d1 = createDGLGraph([("e1", "n1", [])])
+        d1 = createIBDGraph([("e1", "n1", [])])
 
-        d2 = createDGLGraph([("e2", "n1", [])])
+        d2 = createIBDGraph([("e2", "n1", [])])
         
-        self.checkDGLComparison(d1, d2, [], [0,1,2,3,4,5,6,7,8,9,10])
-        self.assert_(not dgl.DGLGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, [], [0,1,2,3,4,5,6,7,8,9,10])
+        self.assert_(not ibd.IBDGraphEqual(d1, d2))
+
+    def test_10_3Node_Equal_Test_Ordering(self):
+        
+        d1 = createIBDGraph([("e1", "n1", []),
+                             ("e1", "n2", []),
+                             ("e2", "n4", []),
+                             ("e2", "n3", [])])
+
+        # Equal, just switched ordering
+        d2 = createIBDGraph([("e2", "n3", []),
+                             ("e1", "n1", []),
+                             ("e2", "n4", []),
+                             ("e1", "n2", [])])
+
+        self.checkIBDComparison(d1, d2, range(-2,2), [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
+
 
     def test_10_4Node_Equal(self):
         
-        d1 = createDGLGraph([("e1", "n1", [("n2", 2), ("n4", 4)]),
+        d1 = createIBDGraph([("e1", "n1", [("n2", 2), ("n4", 4)]),
                              ("e1", "n2", [("n3", 2), ("n3", 4)]),
                              ("e2", "n4", [("n1", 2), ("n2", 4)]),
                              ("e2", "n3", [("n4", 2), ("n1", 4)])])
 
         # Equal, just switched ordering
-        d2 = createDGLGraph([("e2", "n3", [("n4", 2), ("n1", 4)]),
+        d2 = createIBDGraph([("e2", "n3", [("n4", 2), ("n1", 4)]),
                              ("e1", "n1", [("n2", 2), ("n4", 4)]),
                              ("e2", "n4", [("n1", 2), ("n2", 4)]),
                              ("e1", "n2", [("n3", 2), ("n3", 4)])])
         
-        self.checkDGLComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_10_4Node_Switch(self):
         
-        d1 = createDGLGraph([("e1", "n1", []),
+        d1 = createIBDGraph([("e1", "n1", []),
                              ("e1", "n2", [("n3", 2), ("n2", 4)]),
                              ("e2", "n3", [("n2", 2), ("n3", 4)]),
                              ("e2", "n4", [])])
 
-        d2 = createDGLGraph([("e1", "n1", []),
+        d2 = createIBDGraph([("e1", "n1", []),
                              ("e1", "n2", []),
                              ("e2", "n3", []),
                              ("e2", "n4", [])])
 
-        self.checkDGLComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+
+        self.checkIBDComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
+
+    def test_10_5Node_AlternateLabels(self):
+        
+        d1 = createIBDGraph([("e1", "n1", []),
+                             ("e1", "n2", [("n5", 2), ("n2", 4)]),
+                             ("e2", "n3", [("n2", 2), ("n3", 4)]),
+                             ("e2", "n4", [])])
+
+        d2 = createIBDGraph([("e1", "n1", []),
+                             ("e1", "n2", []),
+                             ("e2", "n3", []),
+                             ("e2", "n4", [])])
+
+        self.checkIBDComparison(d1, d2, [0,1,2,3,4,5,6,7,8,9,10], [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
+
+    def test_10_5Node_Different(self):
+        
+        d1 = createIBDGraph([("e1", "n1", []),
+                             ("e1", "n2", [("n1", 2), ("n2", 4)]),
+                             ("e2", "n3", [("n2", 2), ("n3", 4)]),
+                             ("e2", "n4", [])])
+
+        d2 = createIBDGraph([("e1", "n1", []),
+                             ("e1", "n2", []),
+                             ("e2", "n3", []),
+                             ("e2", "n4", [])])
+
+        self.checkIBDComparison(d1, d2, [0,1,4,5,6,7,8,9,10], [2,3])
+        self.assert_(not ibd.IBDGraphEqual(d1, d2))
+
 
     def test_20_Corner_01(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n1", 4)]),
+        d1 = createIBDGraph([("e", "n1", [("n1", 4)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [])])
 
 
-        self.checkDGLComparison(d1, d2, range(10), [])
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, range(10), [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
 
     def test_20_Corner_02_FullCompare(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n1", 4)]),
+        d1 = createIBDGraph([("e", "n1", [("n1", 4)]),
                              ("e", "n2", [])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [])])
 
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
-        self.checkDGLComparison(d1, d2, range(10), [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, range(10), [])
 
     def test_20_Corner_03_switch(self):
         
-        d1 = createDGLGraph([("e", "n1", [("n2", 4)]),
+        d1 = createIBDGraph([("e", "n1", [("n2", 4)]),
                              ("e", "n2", [("n1", 4)])])
 
-        d2 = createDGLGraph([("e", "n2", []),
+        d2 = createIBDGraph([("e", "n2", []),
                              ("e", "n1", [])])
 
-        self.assert_(dgl.DGLGraphEqual(d1, d2))
-        self.checkDGLComparison(d1, d2, range(10), [])
+        self.assert_(ibd.IBDGraphEqual(d1, d2))
+        self.checkIBDComparison(d1, d2, range(10), [])
 
 ################################################################################
 # More detailed examples, in which parsing is also tested.
@@ -372,17 +421,17 @@ class TestDGLComparisons(unittest.TestCase):
 
         dl = parse_F1_string(s)
 
-        self.assert_(dgl.DGLGraphEqual(dl[0], dl[2]))
-        self.assert_(dgl.DGLGraphEqual(dl[1], dl[3]))
-        self.assert_(not dgl.DGLGraphEqual(dl[0], dl[1]))
+        self.assert_(ibd.IBDGraphEqual(dl[0], dl[2]))
+        self.assert_(ibd.IBDGraphEqual(dl[1], dl[3]))
+        self.assert_(not ibd.IBDGraphEqual(dl[0], dl[1]))
  
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[0], dl[2], 0))
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[1], dl[3], 0))
-        self.assert_(not dgl.DGLGraphEqualAtMarker(dl[0], dl[1], 0))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[0], dl[2], 0))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[1], dl[3], 0))
+        self.assert_(not ibd.IBDGraphEqualAtMarker(dl[0], dl[1], 0))
 
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[0], dl[2], 1))
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[1], dl[3], 1))
-        self.assert_(not dgl.DGLGraphEqualAtMarker(dl[0], dl[1], 1))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[0], dl[2], 1))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[1], dl[3], 1))
+        self.assert_(not ibd.IBDGraphEqualAtMarker(dl[0], dl[1], 1))
 
        
     def testP02_Identical(self):
@@ -443,22 +492,22 @@ class TestDGLComparisons(unittest.TestCase):
 
         dl = parse_F1_string(s)
 
-        self.assert_(dgl.DGLGraphEqual(dl[0], dl[2]))
-        self.assert_(dgl.DGLGraphEqual(dl[1], dl[3]))
-        self.assert_(not dgl.DGLGraphEqual(dl[0], dl[1]))
+        self.assert_(ibd.IBDGraphEqual(dl[0], dl[2]))
+        self.assert_(ibd.IBDGraphEqual(dl[1], dl[3]))
+        self.assert_(not ibd.IBDGraphEqual(dl[0], dl[1]))
 
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[0], dl[2], 0))
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[1], dl[3], 0))
-        self.assert_(not dgl.DGLGraphEqualAtMarker(dl[0], dl[1], 0))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[0], dl[2], 0))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[1], dl[3], 0))
+        self.assert_(not ibd.IBDGraphEqualAtMarker(dl[0], dl[1], 0))
 
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[0], dl[2], 1))
-        self.assert_(dgl.DGLGraphEqualAtMarker(dl[1], dl[3], 1))
-        self.assert_(not dgl.DGLGraphEqualAtMarker(dl[0], dl[1], 1))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[0], dl[2], 1))
+        self.assert_(ibd.IBDGraphEqualAtMarker(dl[1], dl[3], 1))
+        self.assert_(not ibd.IBDGraphEqualAtMarker(dl[0], dl[1], 1))
 
 
     def testFileDupCount(self):
         pass
-        #dl = parse_F1_file('tests/datafiles/test01.dglf1')
+        #dl = parse_F1_file('tests/datafiles/test01.ibdf1')
         #displayDuplicationCount(dl)
 
 if __name__ == '__main__':

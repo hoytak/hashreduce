@@ -1,6 +1,6 @@
 /***************************************************
  * The HashObject data structure is the key component within the
- * dglgraph library.  It is the base structure for all items stored in
+ * ibdgraph library.  It is the base structure for all items stored in
  * hash tables, hash collections, etc.
  *
  * Manipulations on hash key structures is provided.  These include
@@ -60,7 +60,7 @@
 									\
     /* A counter of all the things (e.g. hash tables) that lock this	\
      * structure. */							\
-    size_t lock_count;							\
+    size_t marker_lock_count;						\
 									\
     /* Marker Info stuff; possibly null denoting invariance. */		\
     MarkerInfo *mi
@@ -97,34 +97,32 @@ static inline void H_CLEAR(obj_ptr x);
 HashObject* H_Copy(obj_ptr dest_key, cobj_ptr src);
 static inline HashObject* H_COPY(obj_ptr dest_key, cobj_ptr hk);
 
+/* These throw away the marker information. */
+HashObject* H_CopyAsUnmarked(obj_ptr dest_key, cobj_ptr src);
+static inline HashObject* H_COPY_AS_UNMARKED(obj_ptr dest_key, cobj_ptr hk);
+
 /********************************************************************************
  *
  *  Locking operations
  *
- ********************************************************************************/
+ * The following are debug routines and enabled only when compiled in
+ * debug mode.  It ensures that a hash object's marker information
+ * does not change in one hash table when it is part of a hash table.
+ * These checks don't happen when not in debug mode. 
+ *********************************************************************************/ 
 
-/* Returns true if the hash object is frozen and false otherwise.
- * Frozen objects should not be modified.
- *
- * Note that a macro version, H_IS_LOCKED, also exists.
- */
-bool H_IsLocked(cobj_ptr x);
-static inline bool H_IS_LOCKED(cobj_ptr x);
+static inline bool H_MarkerIsLocked(cobj_ptr x);
 
 /* Claims a lock on the object.  This simply increments the lock count
  * and a reference. */
-void H_ClaimLock(obj_ptr x);
-static inline void H_CLAIM_LOCK(obj_ptr x);
+static inline void H_ClaimMarkerLock(obj_ptr x);
 
 /* Releases a lock on the object and decrements a reference.  When the
  * lock count gets down to 0, it can be manipulated. */
-void H_ReleaseLock(obj_ptr x);
-static inline void H_RELEASE_LOCK(obj_ptr x);
+static inline void H_ReleaseMarkerLock(obj_ptr x);
 
 /* Returns the number of objects holding a lock on that object. */
-size_t H_LockCount(cobj_ptr x);
-static inline size_t H_LOCK_COUNT(cobj_ptr x);
-
+static inline size_t H_MarkerLockCount(cobj_ptr x);
 
 
 /*********************************************************************************
@@ -137,10 +135,8 @@ static inline size_t H_LOCK_COUNT(cobj_ptr x);
  * of a certain type.  
  *
  * All functions return a pointer the hash key.  If dest_key is NULL,
- * then a new hash key with possible 
+ * then a new hash key is created and filled. 
  *
-
- * It is assumed that all of the inputs to these functions 
  */
 
 /* Create a new hash key which is an order dependent combination of
@@ -201,6 +197,10 @@ bool H_IsMarked(cobj_ptr x);
 static inline bool H_IS_MARKED(cobj_ptr x);
 
 void H_AddMarkerValidRange(obj_ptr x, markertype r_start, markertype r_end);
+static inline void H_ADD_MARKER_VALID_RANGE(obj_ptr x, markertype r_start, markertype r_end);
+
+void H_RemoveMarkerValidRange(obj_ptr x, markertype r_start, markertype r_end);
+static inline void H_REMOVE_MARKER_VALID_RANGE(obj_ptr x, markertype r_start, markertype r_end);
 
 bool H_MarkerPointIsValid(cobj_ptr x, markertype m);
 
@@ -237,7 +237,7 @@ static inline HashKey* H_Hash_RW(obj_ptr x);
 
 /********************************************************************************
  *
- *  Debug functions; shouldn't need to be used outside the main code
+ *  Debug functions; shouldn't need to be used outside the library
  *
  ********************************************************************************/
 
@@ -250,6 +250,8 @@ unsigned long H_ExtractHashComponent(cobj_ptr x, unsigned int pos);
 
 /* Fills the dest string with a hex representation of the given hash. */
 void H_ExtractHash(char* dest_string, cobj_ptr x);
+
+const char * H_HashAs8ByteString(cobj_ptr x);
 
 void H_debug_print(cobj_ptr x);
 

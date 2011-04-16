@@ -1,7 +1,6 @@
 #ifndef OPTIMIZATIONS_H
 #define OPTIMIZATIONS_H
 
-
 /* Branching hints -- unlikely and likely */
 
 #ifdef __GNUC__
@@ -10,11 +9,13 @@
 
 #define likely(x)   __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
+#define likely_value(x, c)   __builtin_expect((x), c)
 
 #else /* __GNUC__ > 2 ... */
 
 #define likely(x)   (x)
 #define unlikely(x) (x)
+#define likely_value(x, c) (x)
 
 #endif /* __GNUC__ > 2 ... */
 
@@ -22,14 +23,9 @@
 
 #define likely(x)   (x)
 #define unlikely(x) (x)
+#define likely_value(x, c) (x)
 
 #endif /* __GNUC__ */
-
-
-/* Handling of the restrict keyword. */
-
-#define restrict
-
 
 /* Prefetching operations */ 
 
@@ -50,8 +46,8 @@
 
 #endif
 
-
-typedef unsigned int short_size_t;
-
+#define SIZE_T_INFTY (~( (size_t) 0 ) )
+#define SIZE_T_IS_INFTY(x) ( !(~((size_t)(x))) )
 
 #endif /* OPTIMIZATIONS_H */
+

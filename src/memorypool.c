@@ -17,12 +17,12 @@
 #define __PageSizeAtLevel(size, level)			\
     __Min(1 << (level), 1 << __TargetLogPageSize)
 
-/* Allocation function. */
+/* Init function. */
 void MP_Init(MemoryPool *mp, size_t item_size)
 {
     mp->item_size = item_size;
-	
-    mp->num_pages = 16;
+
+    mp->num_pages = 4;
 
     mp->pages = (_MP_Page*)malloc(mp->num_pages*sizeof(_MP_Page));
     MEMCHECK(mp->pages);
@@ -54,7 +54,6 @@ void MP_Clear(MemoryPool *mp)
     mp->page_search_start = 0;
     mp->candidate_index_for_collection = 0;
 }
-
 
 void* MP_Malloc(MemoryPool *mp, size_t *mpool_origin_index_dest)
 {
@@ -93,7 +92,7 @@ void* MP_Malloc(MemoryPool *mp, size_t *mpool_origin_index_dest)
     /* Now set the block index. */
 
     /* see if we need to allocate a new page. */
-    if(page->memblock == NULL)
+    if(unlikely(page->memblock == NULL))
     {
 	assert(page->use_mask == 0);
      

@@ -11,7 +11,6 @@
 #include "bitops.h"
 #include <stdlib.h>
 
-
 /* For convenience, define a way for structures using the memory pool
  * to automatically embed the proper information in structures being
  * used.  This macro must always be first in a structure's
@@ -33,7 +32,7 @@ typedef struct {
     size_t num_pages;
     _MP_Page *pages;
 
-    size_t page_search_start;		
+    size_t page_search_start;
     size_t candidate_index_for_collection;
 } MemoryPool;
 
@@ -48,10 +47,6 @@ void  MP_Clear(MemoryPool *mp);
 
 void* MP_Malloc(MemoryPool *mp, size_t *mpool_origin_index_dest);
 void  MP_Free(MemoryPool *mp, void *obj, size_t mpool_origin_index);
-
-/* TODO: Add in block allocation ability. */
-
-
 
 /* These convenience macros simply wrap the above functions when the
  * item within it is a MemoryPoolItem struct.*/
@@ -69,6 +64,30 @@ static inline MemoryPoolItem* MP_ItemMalloc(MemoryPool *mp)
 	MP_Free((mp), (item), (item)->_mpool_origin_index);	\
     }while(0)
 
+/* Now create a macro to define wrapper functions for these (optional). */
+
+#define DEFINE_GLOBAL_MEMORY_POOL(Type)				\
+    static MemoryPool _memorypool_##Type =			\
+	STATIC_MEMORY_POOL_VALUES(sizeof(Type));                \
+								\
+    inline Type* Mp_New##Type()			\
+    {								\
+	if(unlikely((_memorypool_##Type).num_pages == 0))	\
+	{							\
+	    assert((_memorypool_##Type).pages == NULL);		\
+	    MP_Init(&(_memorypool_##Type), sizeof(Type));	\
+	}							\
+								\
+	return (Type*)MP_ItemMalloc(&_memorypool_##Type);	\
+    }								\
+								\
+    inline void Mp_Free##Type(Type* item)		\
+    {								\
+	MP_ItemFree(&_memorypool_##Type, item);			\
+    }
 
 
+#define DECLARE_GLOBAL_MEMORY_POOL(Type)	\
+    inline Type* Mp_New##Type();		\
+    inline void Mp_Free##Type(Type* item);
 #endif

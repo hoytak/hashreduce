@@ -16,9 +16,9 @@ void O_DecRef(void *obj)
     O_DECREF( (Object*)obj); 
 }
 
-size_t O_RefCount(void *obj) 
+size_t O_RefCount(const void *obj) 
 {
-    return O_REF_COUNT( (Object*)obj); 
+    return O_REF_COUNT( (const Object*)obj); 
 }
 
 /* Declare a given object as value-based. */

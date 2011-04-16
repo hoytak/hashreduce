@@ -44,33 +44,6 @@ void H_Clear(obj_ptr x)
     H_CLEAR(x);
 }
 
-/********************************************************************************
- *
- *  Locking operations
- *
- ********************************************************************************/
-
-bool H_IsLocked(cobj_ptr x)
-{
-    return H_IS_LOCKED(x);
-}
-
-void H_ClaimLock(obj_ptr x)
-{
-    H_CLAIM_LOCK(x);
-}
-
-void H_ReleaseLock(obj_ptr x)
-{
-    H_RELEASE_LOCK(x);
-}
-
-size_t H_LockCount(cobj_ptr x)
-{
-    return H_LOCK_COUNT(x);
-}
-
-
 /*********************************************************************************
  *
  *  Functions for filling the hash keys with values.
@@ -80,7 +53,7 @@ size_t H_LockCount(cobj_ptr x)
 HashObject* Hf_Combine(obj_ptr dest_key, cobj_ptr h1, cobj_ptr h2)
 {
     HashObject *h = _H_CreateOrCast(dest_key);
-    Hk_Combine(H_Hash_RW(h), H_Hash_RO(h1), H_Hash_RO(h2));
+    Hkf_Combine(H_Hash_RW(h), H_Hash_RO(h1), H_Hash_RO(h2));
     return h;
 }
 
@@ -136,6 +109,11 @@ HashObject* H_Copy(obj_ptr dest_key, cobj_ptr src)
 HashObject* Hf_CopyFromKey(obj_ptr dest_key, const HashKey *hk)
 {
     return Hf_COPY_FROM_KEY(dest_key, hk);
+}
+
+HashObject* H_CopyAsUnmarked(obj_ptr dest_key, cobj_ptr src)
+{
+    return H_COPY_AS_UNMARKED(dest_key, src);
 }
 
 /*********************************************************************************
@@ -204,13 +182,12 @@ bool H_IsMarked(cobj_ptr x)
 
 void H_AddMarkerValidRange(obj_ptr x, markertype r_start, markertype r_end)
 {
-    HashObject *h = O_Cast(HashObject, x);
-    assert(!H_IS_LOCKED(h));
+    H_ADD_MARKER_VALID_RANGE(x, r_start, r_end);
+}
 
-    if(h->mi == NULL)
-	h->mi = Mi_New(r_start, r_end);
-    else
-	Mi_AddValidRange(h->mi, r_start, r_end);
+void H_RemoveMarkerValidRange(obj_ptr x, markertype r_start, markertype r_end)
+{
+    H_REMOVE_MARKER_VALID_RANGE(x, r_start, r_end);
 }
 
 bool H_MarkerPointIsValid(cobj_ptr x, markertype m)
@@ -227,7 +204,6 @@ void H_ClearMarkerInfo(obj_ptr x)
 {
     H_CLEAR_MARKER_INFO(x);
 }
-
 
 void H_GiveMarkerInfo(obj_ptr x, MarkerInfo *mi)
 {
@@ -286,7 +262,8 @@ void H_ExtractHash(char* dest_string, cobj_ptr x)
 void H_debug_print(cobj_ptr x)
 {
     const HashObject *h = O_CastC(HashObject, x);
-    printf("Hash Object %xud: ", (size_t)h);
+    printf("Hash Object %lxud: ", (size_t)h);
     Hk_debug_PrintHash(H_Hash_RO(h));
-    printf("\n");
+    printf(": \t");
+    Mi_debug_printMi(H_Mi(h));
 }
