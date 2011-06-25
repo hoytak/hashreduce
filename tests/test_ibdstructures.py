@@ -116,8 +116,34 @@ class TestIBDLabelReference(unittest.TestCase):
         g = newIBDGraph()
         self.checkConsistent(g, getEdge, [("n%d" % n) for n in range(-10,10)] + range(-10,10))
         delIBD(g)
-        
 
+
+
+def testInvariantRegions(g, m_min, m_max):
+
+    ml = range(m_min, m_max)
+
+    l = [getIBDHashAtMarker(g, m) for m in ml]
+
+    def ml_hash(m):
+        if m < m_min or m >= m_max:
+            return None
+        
+        idx = m - m_min
+
+        return l[idx]
+         
+    for m in ml:
+        lb, ub = getInvariantRegion(g, m)
+
+        h = ml_hash(m)
+
+        for mc in xrange(max(lb, m_min), min(ub, m_max)):
+            assert ml_hash(mc) == h, "ml = %s != %s = h" % (ml_hash(mc), h)
+            
+        assert ml_hash(lb - 1) != h
+        assert ml_hash(ub) != h
+        
 
 
 class TestIBDComparisons(unittest.TestCase):
@@ -360,6 +386,95 @@ class TestIBDComparisons(unittest.TestCase):
         self.assert_(ibd.IBDGraphEqual(d1, d2))
         self.checkIBDComparison(d1, d2, range(10), [])
 
+    def test_30_InvariantRegion_01(self):
+        
+        d1 = createIBDGraph([("e", "n1", [("n2", 4)]),
+                             ("e", "n2", [("n1", 4)])])
+
+        testInvariantRegions(d1, -5, 10)
+
+    def test_30_InvariantRegion_02(self):
+
+        d1 = createIBDGraph([("e1", "n1", [("n2", 2), ("n4", 4)]),
+                             ("e1", "n2", [("n3", 2), ("n3", 4)]),
+                             ("e2", "n4", [("n1", 2), ("n2", 4)]),
+                             ("e2", "n3", [("n4", 2), ("n1", 4)])])
+
+        testInvariantRegions(d1, -5, 10)
+
+    def test_30_InvariantRegion_03(self):
+
+        d1 = createIBDGraph([("e1", "n1", [("n2", 2), ("n4", 4)]),
+                             ("e1", "n2", [("n3", 2), ("n3", 4)]),
+                             ("e2", "n4", [("n1", 2), ("n2", 4)]),
+                             ("e2", "n3", [("n4", 2), ("n1", 4)])])
+
+        testInvariantRegions(d1, -5, 10)
+
+    def test_30_InvariantRegion_03(self):
+
+        s = """
+            408 9 9 0
+            408 10 10 0
+            4080 11 11 0
+            4080 12 12 0
+            513 10 9 0
+            513 12 12 0
+            514 10 10 0
+            514 12 12 1 2 11 
+            515 9 9 0
+            515 11 12 0
+            516 9 10 0
+            516 12 12 0
+
+            408 9 9 0
+            408 10 10 0
+            4080 11 11 0
+            4080 12 12 0
+            513 10 10 0
+            513 11 11 0
+            514 9 9 0
+            514 12 12 0
+            515 9 10 0
+            515 12 11 0
+            516 9 9 0
+            516 11 11 0
+
+            408 9 9 0
+            408 10 10 0
+            4080 11 11 0
+            4080 12 12 0
+            513 10 9 0
+            513 12 12 0
+            514 10 10 0
+            514 12 12 1 2 11 
+            515 9 9 0
+            515 11 12 0
+            516 9 10 0
+            516 12 12 0
+
+            408 9 9 0
+            408 10 10 0
+            4080 11 11 0
+            4080 12 12 0
+            513 10 10 0
+            513 11 11 0
+            514 9 9 0
+            514 12 12 0
+            515 9 10 0
+            515 12 11 0
+            516 9 9 0
+            516 11 11 0
+            """
+
+        d = parse_F1_string(s)
+
+        testInvariantRegions(d[0], -5, 20)
+        testInvariantRegions(d[1], -5, 20)
+        testInvariantRegions(d[2], -5, 20)
+        testInvariantRegions(d[3], -5, 20)
+
+
 ################################################################################
 # More detailed examples, in which parsing is also tested.
 
@@ -503,7 +618,6 @@ class TestIBDComparisons(unittest.TestCase):
         self.assert_(ibd.IBDGraphEqualAtMarker(dl[0], dl[2], 1))
         self.assert_(ibd.IBDGraphEqualAtMarker(dl[1], dl[3], 1))
         self.assert_(not ibd.IBDGraphEqualAtMarker(dl[0], dl[1], 1))
-
 
     def testFileDupCount(self):
         pass

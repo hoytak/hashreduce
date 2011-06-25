@@ -348,6 +348,45 @@ bool IBDGraphEqualAtMarker(IBDGraph *g1, IBDGraph *g2, markertype m)
     return is_equal;
 }
 
+void IBDGraphInvariantRegion(markertype *start, markertype *end, IBDGraph *g, markertype m) 
+{
+    if(g->dirty)
+	IBDGraph_Refresh(g);
+    
+    HashTableMarkerIterator htmi;
+    HashValidityItem hvi;
+
+    Htmi_INIT(g->graph_hashes, &htmi);
+
+    while(Htmi_NEXT(&hvi, &htmi) && hvi.end <= m); 
+
+    assert(hvi.start <= m);
+    assert(hvi.end > m);
+
+    *start = hvi.start;
+    *end = hvi.end;
+}
+
+/* Makes the python debugging easier; slower than previous */
+markertype IBDGraphInvariantRegionLower(IBDGraph *g, markertype m)
+{
+    markertype start, end;
+
+    IBDGraphInvariantRegion(&start, &end, g, m);
+    
+    return start;
+}
+
+/* Makes the python debugging easier; slower than previous */
+markertype IBDGraphInvariantRegionUpper(IBDGraph *g, markertype m)
+{
+    markertype start, end;
+
+    IBDGraphInvariantRegion(&start, &end, g, m);
+    
+    return end;
+}
+
 HashObject* IBDGraphViewHash(IBDGraph *g)
 {
     if(g->dirty)

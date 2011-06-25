@@ -13,6 +13,8 @@ ibd.IBDGraphNodeByName.restype = ctypes.c_void_p
 ibd.IBDGraphNodeByNumber.restype = ctypes.c_void_p
 ibd.IBDGraphViewHash.restype = ctypes.c_void_p
 ibd.IBDGraphGetHashAtMarker.restype = ctypes.c_void_p
+ibd.IBDGraphInvariantRegionLower.restype = ctypes.c_long
+ibd.IBDGraphInvariantRegionUpper.restype = ctypes.c_long
 
 mr_plus_infinity = ibd.Mr_Plus_Infinity()
 
@@ -73,6 +75,13 @@ def createIBDGraph(connections):
 
     return g
 
+def getIBDHashAtMarker(g, m):
+    h1 = ibd.IBDGraphGetHashAtMarker(g, m)
+    h = extractHash(h1)
+    ibd.O_DecRef(h1)
+
+    return h
+
 def duplicateReportDict(ibd_list, marker_loc):
 
     count = {}
@@ -81,10 +90,8 @@ def duplicateReportDict(ibd_list, marker_loc):
         if marker_loc is None:
             h = extractHash(ibd.IBDGraphViewHash(g))
         else:
-            h1 = ibd.IBDGraphGetHashAtMarker(g, marker_loc)
-            h = extractHash(h1)
-            ibd.O_DecRef(h1)
-
+            h = getIBDHashAtMarker(g, marker_loc)
+            
         if h in count:
             count[h][0] += 1
             count[h][1].append(idx+1)
@@ -104,5 +111,10 @@ def displayDuplicationCount(ibd_list, marker_loc = None):
 
         print  c_s + " "*(6 - len(c_s)) + ": " + v_s
 
+def getInvariantRegion(g, m):
 
+    lower = ibd.IBDGraphInvariantRegionLower(g, m)
+    upper = ibd.IBDGraphInvariantRegionUpper(g, m)
+
+    return lower, upper
 

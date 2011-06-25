@@ -87,6 +87,11 @@ bool IBDGraphEqual(IBDGraph *g1, IBDGraph *g2);
 /* Returns the pointer to the current hash of the graph. */
 HashObject* IBDGraphViewHash(IBDGraph *g);
 HashObject* IBDGraphGetHashAtMarker(IBDGraph *g, markertype m);
+void IBDGraphInvariantRegion(markertype *start, markertype *end, IBDGraph *g1, markertype m);
+
+/* These slower than IBDGraphInvariantRegion. */
+markertype IBDGraphInvariantRegionLower(IBDGraph *g1, markertype m);
+markertype IBDGraphInvariantRegionUpper(IBDGraph *g1, markertype m);
 
 /************************************************************
  *
