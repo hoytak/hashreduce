@@ -134,6 +134,9 @@ void Hkf_Combine(hk_ptr dest_key, chk_ptr hk1, chk_ptr hk2);
 /* Update the value of the first depending on the value of the second. */
 void Hk_InplaceCombine(hk_ptr dest_key, chk_ptr hk);
 
+/* Same as above, but with two ints as well (used a lot internally. */
+void Hk_InplaceCombinePlusTwoInts(hk_ptr dest_key, chk_ptr hk, int64_t s1, int64_t s2);
+
 /* Do a Rehashing of the key hk; note this is not the Rehash function
  * below, which special cases the null hash. */
 void Hk_InplaceHash(hk_ptr hk);

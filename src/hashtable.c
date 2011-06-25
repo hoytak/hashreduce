@@ -21,6 +21,12 @@
 #include <memory.h>
 #include <math.h>
 
+#ifdef RUN_CONSISTENCY_CHECKS
+
+#warning "Running internal consistency checks as part of hashtable operations; some processes may be slow." 
+#endif
+
+
 /* Uncomment this line to run internal consistency checks on the hash
  * table structure for debugging purposes. */
 
@@ -1572,6 +1578,28 @@ void _Ht_MSL_HashAtMarkerPoint(HashKey *hk_dest, HashTable *ht, markertype loc)
     }
 }
 
+HashValidityItem _Htmi_NewForRangeHashing(HashTable *ht, HashTableMarkerIterator* htmi, 
+					  markertype m);
+
+void _Ht_MSL_HashOfMarkerRange(HashKey *hk_dest, HashTable *ht, markertype start, markertype end)
+{
+    Hk_CLEAR(hk_dest);
+
+    if(unlikely(start == MARKER_PLUS_INFTY))
+	return;
+
+    HashTableMarkerIterator htmi;
+    HashValidityItem hvi = _Htmi_NewForRangeHashing(ht, &htmi, start);
+
+    do{
+	Hk_InplaceCombinePlusTwoInts(
+	    hk_dest, &(hvi.hk), 
+	    max(start, hvi.start), 
+	    min(end, hvi.end));
+
+    } while(Htmi_NEXT(&hvi, &htmi) && hvi.start < end);
+}
+
 /*****************************************
  * The functions to wrap the above.
  ****************************************/
@@ -1926,6 +1954,17 @@ HashObject* Ht_HashAtMarkerPoint(HashObject *h_dest, HashTable *ht, markertype m
     return h_dest;
 }
 
+HashObject* Ht_HashOfMarkerRange(HashObject *h_dest, HashTable *ht, 
+				 markertype start, markertype end)
+{
+    if(h_dest == NULL)
+	h_dest = ConstructHashObject();
+
+    _Ht_MSL_HashOfMarkerRange(H_Hash_RW(h_dest), ht, start, end);
+
+    return h_dest;
+}
+
 bool Ht_EqualAtMarker(ht_rptr ht1, ht_rptr ht2, markertype m)
 {
     if(unlikely(ht1 == ht2))
@@ -1948,23 +1987,16 @@ HashObject* Ht_HashOfEverything(HashObject* h_dest, ht_rptr ht)
 
     H_Clear(h_dest);
 
-    HashTableMarkerIterator* htmi = Htmi_New(ht);
+    HashTableMarkerIterator htmi;
+    Htmi_INIT(ht, &htmi);
+
     HashValidityItem hvi;
 
-    while(Htmi_NEXT(&hvi, htmi))
+    while(Htmi_NEXT(&hvi, &htmi))
     {
-	Hk_InplaceCombine(H_Hash_RW(h_dest), &(hvi.hk));
-	
-	int64_t s = (abs(hvi.start) <= 1000000) 
-	    ? (uint64_t)(1000 * hvi.start) : (uint64_t)(hvi.start);
-
-	int64_t e = (abs(hvi.end) <= 1000000) 
-	    ? (uint64_t)(1000 * hvi.end) : (uint64_t)(hvi.end);
-
-	Hk_UpdateWithTwoInts(H_Hash_RW(h_dest), s, e);
+	Hk_InplaceCombinePlusTwoInts(
+	    H_Hash_RW(h_dest), &(hvi.hk), hvi.start, hvi.end);
     }
-
-    Htmi_Finish(htmi);
 
     return h_dest;
 }
@@ -2094,8 +2126,6 @@ void Ht_MSL_debug_PrintNodeStack(_HT_MSL_NodeStack *ns)
 
 
 #ifdef RUN_CONSISTENCY_CHECKS
-
-#warning "Running internal consistency checks as part of hashtable operations; some processes may be slow." 
 
 size_t __Ht_debug_CountChainedTableNodes(const _HT_Node * hn)
 {
@@ -2596,6 +2626,86 @@ HashTableMarkerIterator* Htmi_New(HashTable *ht)
 
     Htmi_INIT(ht, htmi);
     return htmi;
+}
+
+HashValidityItem _Htmi_NewForRangeHashing(HashTable *ht, HashTableMarkerIterator* htmi, 
+					  markertype m)
+{
+    htmi->ht = ht;
+
+    /* First need to advance to the location on the stack that is
+     * before m */
+    if(unlikely(ht->marker_sl == NULL))
+	_Ht_MSL_Init(ht);
+
+    _HT_MarkerSkipList *msl = ht->marker_sl;
+
+    Hk_CLEAR(&(htmi->current_item.hk));
+
+    /* Just travel down the tree to the node before this one. */
+    _HT_MSL_NodeStack *ns = _Ht_MSL_BS_New((_HT_MSL_Node*)msl->start_node);
+    unsigned int cur_level = msl->start_node_level;
+
+    while(__Ht_MSL_AdvanceNodeStack(&ns, &cur_level, m));
+    
+    assert(ns->node->marker <= m);
+
+    /* Set up the hash key stuff. */
+    htmi->next = _Ht_MSL_BS_NextNode(ns);
+    htmi->current_item.start = _Ht_MSL_BS_CurNode(ns)->marker;
+    htmi->current_item.end   = (htmi->next != NULL) ? htmi->next->marker : MARKER_PLUS_INFTY;
+
+    /* Get the hash value stuff ready. */
+    Hk_CLEAR(&(htmi->current_item.hk));
+
+    /* Include the tip leaf, and then all travel nodes past that. */
+    Hk_REDUCE_UPDATE(&(htmi->current_item.hk), &(_Ht_MSL_BS_CurNode(ns)->hk));
+    _Ht_MSL_BS_Pop(&ns);
+
+    while(ns != NULL)
+    {
+	if(ns->is_travel_node)
+	    Hk_REDUCE_UPDATE(&(htmi->current_item.hk), &(_Ht_MSL_BS_CurNode(ns)->hk));
+
+	_Ht_MSL_BS_Pop(&ns);
+    }
+
+    if(likely(htmi->next != NULL) )
+    {
+	/* Now got to configure this one so we don't include a 0 hash
+	 * between end and start. */
+	while(unlikely(Hk_ISZERO(&(htmi->next->hk)))) 
+	{
+	    htmi->next = (_HT_MSL_Node*)(htmi->next->next);
+	
+	    if(unlikely(htmi->next == NULL))
+	    {
+		htmi->current_item.end = MARKER_PLUS_INFTY;
+		break;
+	    }
+	
+	    htmi->current_item.end = htmi->next->marker;
+	}
+    }
+
+    /* And we're done! */
+
+#ifdef RUN_CONSISTENCY_CHECKS
+    HashTableMarkerIterator htmi2;
+    Htmi_INIT(ht, &htmi2);
+
+    HashValidityItem hvi;
+
+    do{
+	assert(Htmi_NEXT(&hvi, &htmi2));
+    }while(hvi.end <= m);
+    
+    assert(htmi2.current_item.start <= htmi->current_item.start);
+    assert(htmi2.current_item.end == htmi->current_item.end);
+    assert(Hk_Equal(&(htmi2.current_item.hk), &(htmi->current_item.hk)));
+#endif
+
+    return htmi->current_item;
 }
 
 

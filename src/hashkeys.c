@@ -508,6 +508,18 @@ void Hk_InplaceCombine(hk_ptr dest_key, chk_ptr hk)
     check_hashkey_range(dest_key);
 }
 
+/* Update the value of the first depending on the value of the second, along with two ints */
+void Hk_InplaceCombinePlusTwoInts(hk_ptr dest_key, chk_ptr hk, int64_t s1, int64_t s2)
+{
+    *dest_key = WeakHashLen32WithSeeds(dest_key->hk64[0], dest_key->hk64[1], 
+				       hk->hk64[0], hk->hk64[1],
+				       ShiftMix(dest_key->hk64[0])*ShiftMix(hk->hk64[0]), 
+				       ShiftMix(dest_key->hk64[1])*ShiftMix(hk->hk64[1]));
+    check_hashkey_range(dest_key);
+    
+    Hk_UpdateWithTwoInts(dest_key, s1*(k0^k1), s2*(k0^k1));
+}
+
 void Hkf_Combine(hk_ptr dest_key, chk_ptr hk1, chk_ptr hk2)
 {
     assert(dest_key != NULL);

@@ -296,6 +296,9 @@ HashObject* Ht_InsertValidRange(ht_rptr ht, HashObject *hk,
 
 HashObject* Ht_HashAtMarkerPoint(HashObject *h_dest, ht_rptr ht, markertype m);
 
+HashObject* Ht_HashOfMarkerRange(HashObject *h_dest, HashTable *ht, 
+				 markertype start, markertype end);
+
 HashObject* Ht_HashOfEverything(HashObject *h_dest, ht_rptr ht);
 
 bool Ht_EqualAtMarker(ht_rptr ht1, ht_rptr ht2, markertype m);

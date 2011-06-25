@@ -73,6 +73,17 @@ def getHashAtMarkerLoc(ht, m):
     
     return s
 
+def getHashOfMarkerRange(ht, m1, m2):
+    hk = ibd.Ht_HashOfMarkerRange(0, ht, c_long(m1), c_long(m2))
+    assert ibd.O_RefCount(hk) == 1 
+    
+    s = extractHash(hk)
+    assert ibd.O_RefCount(hk) == 1 
+
+    ibd.O_DecRef(hk)
+    
+    return s
+
 def getHashMList(ht, marker_points):
     
     hl = []
@@ -780,6 +791,99 @@ class TestHashTableBasic(unittest.TestCase):
         hashesConsistent(ht, [0,1,4,5,8,9,10], [2,3,6,7])
         
         decRef(ht,h,hk);
+
+    def testRR01_InsertAndClear(self):
+
+        ht = newHT()
+        s1 = getHashOfMarkerRange(ht, 0, 10)
+
+        hk = makeMarkedHashKey(0, -5, 5)
+        ibd.Ht_Give(ht, hk)
+        
+        self.assert_(s1 != getHashOfMarkerRange(ht, 0, 10))
+
+        ibd.Ht_Clear(ht, hk)
+
+        self.assert_(s1 == getHashOfMarkerRange(ht, 0, 10))
+
+        decRef(ht);
+
+    def testRR02_OutsideRangeIgnored_01(self):
+
+        ht1 = newHT()
+        
+        ibd.Ht_Give(ht1, makeMarkedHashKey(0, 0, 5))
+        s1 = getHashOfMarkerRange(ht1, 0, 10)
+
+        ht2 = newHT()
+
+        ibd.Ht_Give(ht2, makeMarkedHashKey(0, -5, 5))
+        
+        self.assert_(s1 == getHashOfMarkerRange(ht2, 0, 10))
+
+        decRef(ht1,ht2);
+
+    def testRR02_OutsideRangeIgnored_02(self):
+
+        ht1 = newHT()
+        
+        ibd.Ht_Give(ht1, makeMarkedHashKey(0, 0, 10))
+        s1 = getHashOfMarkerRange(ht1, 0, 10)
+
+        ht2 = newHT()
+
+        ibd.Ht_Give(ht2, makeMarkedHashKey(0, -5, 15))
+        
+        self.assert_(s1 == getHashOfMarkerRange(ht2, 0, 10))
+
+        decRef(ht1,ht2);
+
+    def testRR02_OutsideRangeIgnored_03(self):
+
+        ht1 = newHT()
+        
+        ibd.Ht_Give(ht1, makeMarkedHashKey(0, 5, 10))
+        s1 = getHashOfMarkerRange(ht1, 0, 10)
+
+        ht2 = newHT()
+
+        ibd.Ht_Give(ht2, makeMarkedHashKey(0, 5, 15))
+        
+        self.assert_(s1 == getHashOfMarkerRange(ht2, 0, 10))
+
+        decRef(ht1,ht2);
+
+    def testRR02_OutsideRangeIgnored_04(self):
+
+        ht1 = newHT()
+        
+        ibd.Ht_Give(ht1, makeMarkedHashKey(0, 0, 5))
+        s1 = getHashOfMarkerRange(ht1, 0, 10)
+
+        ht2 = newHT()
+
+        ibd.Ht_Give(ht2, makeMarkedHashKey(0, 0, 5))
+        ibd.Ht_Give(ht2, makeMarkedHashKey(1, -5, 0))
+        
+        self.assert_(s1 == getHashOfMarkerRange(ht2, 0, 10))
+
+        decRef(ht1,ht2);
+
+    def testRR02_OutsideRangeIgnored_05(self):
+
+        ht1 = newHT()
+        
+        ibd.Ht_Give(ht1, makeMarkedHashKey(0, 0, 5))
+        s1 = getHashOfMarkerRange(ht1, 0, 10)
+
+        ht2 = newHT()
+
+        ibd.Ht_Give(ht2, makeMarkedHashKey(0, 0, 5))
+        ibd.Ht_Give(ht2, makeMarkedHashKey(1, 10, 15))
+        
+        self.assert_(s1 == getHashOfMarkerRange(ht2, 0, 10))
+
+        decRef(ht1,ht2);
 
 ################################################################################
 # Tests about the marker stuff.
