@@ -403,6 +403,14 @@ HashObject* IBDGraphGetHashAtMarker(IBDGraph *g, markertype m)
     return Ht_HashAtMarkerPoint(NULL, g->graph_hashes, m);
 }
 
+HashObject* IBDGraphGetHashOfMarkerRange(IBDGraph *g, markertype start, markertype end)
+{
+    if(g->dirty)
+	IBDGraph_Refresh(g);
+
+    return Ht_HashOfMarkerRange(NULL, g->graph_hashes, start, end);
+}
+
 bool IBDGraphEqual(IBDGraph *g1, IBDGraph *g2)
 {
     HashObject* h1 = IBDGraphViewHash(g1);
