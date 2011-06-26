@@ -425,6 +425,17 @@ bool IBDGraphEqual(IBDGraph *g1, IBDGraph *g2)
  *
  ************************************************************/
 
+void IBDGraph_Print(IBDGraph *g) 
+{
+    if(g->dirty)
+	IBDGraph_Refresh(g);
+
+    printf("IBD Graph ");
+    Hk_Print(H_Hash_RO(g->current_hash));
+    printf(":\n ");
+    Ht_Print(g->graph_hashes);
+}
+
 void IBDGraph_debug_Print(IBDGraph *g)
 {
     printf("##>>>> EDGES <<<< ######################\n\n");

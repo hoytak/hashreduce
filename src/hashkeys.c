@@ -737,6 +737,15 @@ void Hk_debug_PrintHash(chk_ptr hk)
     printf("<%s> ", s);
 }
 
+void Hk_Print(chk_ptr hk)
+{
+    char s[33];
+
+    Hk_ExtractHash(s, hk);
+    s[9] = '\0';
+    printf("%s", s);
+}
+
 unsigned long Hk_GetPrimeOffset()
 {
     return H_HASHKEY_PRIME_OFFSET;

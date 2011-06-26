@@ -738,34 +738,6 @@ mi_ptr Mi_SymmetricDifference(cmi_ptr mi1, cmi_ptr mi2)
     return ret_mi;
 }
 
-void Mi_debug_printMi(cmi_ptr mi)
-{
-    if(mi == NULL)
-    {
-	printf(" [-inf, inf)");
-    }
-    else if(mi->num_array_ranges == 0)
-    {
-	if(mi->r.start != mi->r.end)
-	    printf(" [%ld,%ld)", mi->r.start, mi->r.end);
-	else
-	    printf(" []");
-    }
-    else
-    {
-	int i;
-
-	printf(" ");
-
-	for(i = 0; i < mi->num_array_ranges; ++i)
-	{
-	    printf(" [%ld,%ld), ", mi->range_list[i].start, mi->range_list[i].end);
-	}
-    }
-
-    fflush(stdout);
-}
-
 LOCAL_MEMORY_POOL(MarkerIterator);
 LOCAL_MEMORY_POOL(MarkerRevIterator);
 
@@ -910,16 +882,36 @@ markertype Mr_Minus_Infinity()
     return MARKER_MINUS_INFTY;
 }
 
-void Mi_debug_Print(MarkerInfo *mi)
+void Mi_Print(cmi_ptr mi)
 {
-    MarkerRange mr;
+    if(mi == NULL)
+    {
+	printf(" [-inf, inf)");
+    }
+    else if(mi->num_array_ranges == 0)
+    {
+	if(mi->r.start != mi->r.end)
+	    printf(" [%ld,%ld)", mi->r.start, mi->r.end);
+	else
+	    printf(" [)");
+    }
+    else
+    {
+	int i;
 
-    MarkerIterator *mii =  Mii_New(mi);
-    
-    printf("\nMI: ");
+	printf(" ");
 
-    while(Mii_Next(&mr, mii) )
-	printf(" [%ld, %ld)", mr.start, mr.end);
-
-    printf("\n");
+	for(i = 0; i < mi->num_array_ranges; ++i)
+	{
+	    printf(" [%ld,%ld), ", mi->range_list[i].start, mi->range_list[i].end);
+	}
+    }
 }
+
+void Mi_debug_printMi(cmi_ptr mi)
+{
+     printf("MI %lxud: ", (size_t)mi);
+     Mi_Print(mi);
+     fflush(stdout);
+}
+  

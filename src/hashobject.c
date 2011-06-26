@@ -267,3 +267,11 @@ void H_debug_print(cobj_ptr x)
     printf(": \t");
     Mi_debug_printMi(H_Mi(h));
 }
+
+void H_print(cobj_ptr x)
+{
+    const HashObject *h = O_CastC(HashObject, x);
+    Hk_Print(H_Hash_RO(h));
+    printf(": \t");
+    Mi_Print(H_Mi(h));
+}

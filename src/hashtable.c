@@ -203,10 +203,11 @@ static inline void _Ht_Table_AppendUnique(_ht_node_rptr node, const _HT_Item hi)
     ++(node->size);
 }
 
+
 _HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
     _ht_node_rptr node, const _HT_Item hi, const bool overwrite);
 
-/* Returns true on success, otherwise, _HT_Item* hi gets punted to next one. */
+
 static inline _HT_Table_Insert_Return _Ht_Table_InsertIntoNode(
     _ht_node_rptr node, const _HT_Item hi, 
     const bool overwrite)
@@ -2007,6 +2008,21 @@ HashObject* Ht_HashOfEverything(HashObject* h_dest, ht_rptr ht)
  *  Debug routines 
  *
  ****************************************/
+
+void Ht_Print(HashTable *ht)
+{
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+    
+    HashObject *h;
+
+    while(_Hti_NEXT(&h, &hti))
+    {
+	H_debug_print(h);
+	printf("\n");
+    }
+}
+
 
 void Ht_debug_Print(HashTable *ht)
 {

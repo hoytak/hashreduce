@@ -129,6 +129,7 @@ mi_ptr Mi_SymmetricDifference(cmi_ptr mi1, cmi_ptr mi2);
  *
  ****************************************/
 
+void Mi_Print(cmi_ptr mi);
 void Mi_debug_printMi(cmi_ptr mi);
 
 /****************************************

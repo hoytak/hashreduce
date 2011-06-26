@@ -174,6 +174,7 @@ unsigned long Hk_ExtractHashComponent(chk_ptr hk, unsigned int pos);
 
 /* Fills the dest string with a hex representation of the given data. */
 void Hk_ExtractHash(char* dest_string, chk_ptr hk);
+void Hk_Print(chk_ptr hk);
 void Hk_debug_PrintHash(chk_ptr hk);
 
 unsigned long Hk_GetPrimeOffset();

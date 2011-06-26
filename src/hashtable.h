@@ -214,11 +214,9 @@ inline HashObject* Ht_ViewByKey(ht_crptr ht, HashKey hk);
 
 /* Finds the given key in the hash table, deletes it from the tree and
  * returns it.  The caller would then own a reference to the item.
- * 
  */
 HashObject* Ht_Pop(ht_rptr ht, const HashObject *hk);
 HashObject* Ht_PopByKey(ht_rptr ht, HashKey hk);
-
 
 /* Deletes the given key from the hash table and decrements its
  * refcount.  Returns true if the key was present and false
@@ -474,9 +472,11 @@ inline void Hsi_Finish(HashSequenceIterator* hsi);
 
 /************************************************************
  *
- *  Debug routines.
+ *  Debug/printing routines.
  *
  ************************************************************/
+
+void Ht_Print(HashTable *ht);
 
 void Ht_debug_Print(HashTable *ht);
 void Ht_MSL_debug_Print(HashTable *ht);

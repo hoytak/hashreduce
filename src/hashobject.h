@@ -254,6 +254,7 @@ void H_ExtractHash(char* dest_string, cobj_ptr x);
 const char * H_HashAs8ByteString(cobj_ptr x);
 
 void H_debug_print(cobj_ptr x);
+void H_print(cobj_ptr x);
 
 /* Add in the definitions for the static member functions.*/
 #include "hashobject_inline.h"
