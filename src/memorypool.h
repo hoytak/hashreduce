@@ -67,27 +67,47 @@ static inline MemoryPoolItem* MP_ItemMalloc(MemoryPool *mp)
 /* Now create a macro to define wrapper functions for these (optional). */
 
 #define DEFINE_GLOBAL_MEMORY_POOL(Type)				\
-    static MemoryPool _memorypool_##Type =			\
-	STATIC_MEMORY_POOL_VALUES(sizeof(Type));                \
-								\
-    inline Type* Mp_New##Type()			\
-    {								\
-	if(unlikely((_memorypool_##Type).num_pages == 0))	\
-	{							\
-	    assert((_memorypool_##Type).pages == NULL);		\
-	    MP_Init(&(_memorypool_##Type), sizeof(Type));	\
-	}							\
-								\
-	return (Type*)MP_ItemMalloc(&_memorypool_##Type);	\
-    }								\
-								\
-    inline void Mp_Free##Type(Type* item)		\
-    {								\
-	MP_ItemFree(&_memorypool_##Type, item);			\
-    }
+    MemoryPool _memorypool_##Type =				\
+	STATIC_MEMORY_POOL_VALUES(sizeof(Type));		\
 
+#define DECLARE_GLOBAL_MEMORY_POOL(Type)			\
+								\
+    extern MemoryPool _memorypool_##Type;			\
+								\
+  static inline Type* Mp_New##Type()				\
+  {								\
+      if(unlikely((_memorypool_##Type).num_pages == 0))		\
+      {								\
+	  assert((_memorypool_##Type).pages == NULL);		\
+	  MP_Init(&(_memorypool_##Type), sizeof(Type));		\
+      }								\
+      								\
+      return (Type*)MP_ItemMalloc(&_memorypool_##Type);		\
+  }								\
+    								\
+  static inline void Mp_Free##Type(Type* item)			\
+  {								\
+      MP_ItemFree(&_memorypool_##Type, item);			\
+  }								\
 
-#define DECLARE_GLOBAL_MEMORY_POOL(Type)	\
-    inline Type* Mp_New##Type();		\
-    inline void Mp_Free##Type(Type* item);
+#define LOCAL_MEMORY_POOL(Type)						\
+    static MemoryPool _memorypool_##Type =				\
+	STATIC_MEMORY_POOL_VALUES(sizeof(Type));			\
+    									\
+    static inline Type* Mp_New##Type()					\
+    {									\
+	if(unlikely((_memorypool_##Type).num_pages == 0))		\
+	{								\
+	    assert((_memorypool_##Type).pages == NULL);			\
+	    MP_Init(&(_memorypool_##Type), sizeof(Type));		\
+	}								\
+									\
+	return (Type*)MP_ItemMalloc(&_memorypool_##Type);		\
+    }									\
+    									\
+    static inline void Mp_Free##Type(Type* item)			\
+    {									\
+	MP_ItemFree(&_memorypool_##Type, item);				\
+    }									\
+
 #endif

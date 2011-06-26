@@ -65,8 +65,6 @@ typedef struct _HT_Independent_Node_type {
     _HT_Node node;
 } _HT_Independent_Node;
 
-DECLARE_GLOBAL_MEMORY_POOL(_HT_Independent_Node);
-
 /************************************************************
  * We use a skip list for handling the range markers; these structures
  * are here.  These are embedded into the hash table
@@ -165,8 +163,6 @@ typedef struct _HS_Node_t {
     struct _HS_Node_t *next;
     _HS_Item items[_HS_NODE_SIZE];
 } _HS_Node;
-
-DECLARE_GLOBAL_MEMORY_POOL(_HS_Node);
 
 typedef struct {
     OBJECT_ITEMS;

@@ -766,8 +766,8 @@ void Mi_debug_printMi(cmi_ptr mi)
     fflush(stdout);
 }
 
-DEFINE_GLOBAL_MEMORY_POOL(MarkerIterator);
-DEFINE_GLOBAL_MEMORY_POOL(MarkerRevIterator);
+LOCAL_MEMORY_POOL(MarkerIterator);
+LOCAL_MEMORY_POOL(MarkerRevIterator);
 
 static const MarkerRange _mr_all_valid = {MARKER_MINUS_INFTY, MARKER_PLUS_INFTY};
 

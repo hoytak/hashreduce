@@ -37,11 +37,11 @@
  ************************************************************/
 
 /* Global memory pools for the small style hash table elements. */
-DEFINE_GLOBAL_MEMORY_POOL(_HT_Independent_Node);
-DEFINE_GLOBAL_MEMORY_POOL(_HT_MarkerSkipList);
-DEFINE_GLOBAL_MEMORY_POOL(_HT_MSL_Branch);
-DEFINE_GLOBAL_MEMORY_POOL(_HT_MSL_Leaf);
-DEFINE_GLOBAL_MEMORY_POOL(_HT_MSL_NodeStack);
+LOCAL_MEMORY_POOL(_HT_Independent_Node);
+LOCAL_MEMORY_POOL(_HT_MarkerSkipList);
+LOCAL_MEMORY_POOL(_HT_MSL_Branch);
+LOCAL_MEMORY_POOL(_HT_MSL_Leaf);
+LOCAL_MEMORY_POOL(_HT_MSL_NodeStack);
 
 static inline void _Ht_NonTable_Setup(HashTable *ht)
 {
@@ -2616,7 +2616,7 @@ ht_rptr Ht_KeySet(ht_rptr ht)
  *
  ********************************************************************************/
 
-DEFINE_GLOBAL_MEMORY_POOL(HashTableMarkerIterator);
+LOCAL_MEMORY_POOL(HashTableMarkerIterator);
 
 HashTableMarkerIterator* Htmi_New(HashTable *ht)
 {
@@ -2722,6 +2722,9 @@ inline void Htmi_Finish(HashTableMarkerIterator* htmi)
  *
  ********************************************************************************/
 
+LOCAL_MEMORY_POOL(_HS_Node);
+LOCAL_MEMORY_POOL(HashSequenceIterator);
+
 void _Hs_Constructor(HashSequence* hs)
 {
     hs->end_node = &(hs->nodes);
@@ -2751,11 +2754,7 @@ DEFINE_OBJECT(
     /* delete */    _Hs_Destructor,
     /* Duplicate */ NULL);
 
-DEFINE_GLOBAL_MEMORY_POOL(_HS_Node);
-
 /* Now the iterator stuff to go along with it. */
-
-DEFINE_GLOBAL_MEMORY_POOL(HashSequenceIterator);
 
 inline HashSequenceIterator* Hsi_New(HashSequence *hs)
 {
