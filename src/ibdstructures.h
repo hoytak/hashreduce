@@ -95,6 +95,11 @@ void IBDGraphInvariantRegion(markertype *start, markertype *end, IBDGraph *g1, m
 markertype IBDGraphInvariantRegionLower(IBDGraph *g1, markertype m);
 markertype IBDGraphInvariantRegionUpper(IBDGraph *g1, markertype m);
 
+/* These functions can be used for testing whether a (possibly
+ * external) edge or node is also present in this graph. */ 
+bool IBDGraphContainsEdge(IBDGraph *g, IBDGraphEdge *e);
+bool IBDGraphContainsNode(IBDGraph *g, IBDGraphNode *n);
+
 /************************************************************
  *
  *  Debug routines.

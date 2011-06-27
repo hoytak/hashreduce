@@ -418,6 +418,16 @@ bool IBDGraphEqual(IBDGraph *g1, IBDGraph *g2)
 
     return H_Equal(h1, h2);
 }
+
+bool IBDGraphContainsEdge(IBDGraph *g, IBDGraphEdge *e)
+{
+    return Ht_Contains(g->edges, O_Cast(HashObject, e));
+}
+
+bool IBDGraphContainsNode(IBDGraph *g, IBDGraphNode *n)
+{
+    return Ht_Contains(g->nodes, O_Cast(HashObject, n));
+}
     
 /************************************************************
  *

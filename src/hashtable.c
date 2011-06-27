@@ -191,9 +191,11 @@ static inline void _Ht_Table_AppendUnique(_ht_node_rptr node, const _HT_Item hi)
     {
 #ifndef NDEBUG
 	if(Hk_GEQ(H_Hash_RO(node->items[node->size - 1].obj), H_Hash_RO(hi.obj)))
-	    fprintf(stderr, "Error in item ordering; object \n%llx >= \n%llx\n", 
-		    H_Hash_RO(node->items[node->size - 1].obj)->hk64[HK64I(0)], 
-		    H_Hash_RO(hi.obj)->hk64[HK64I(0)]);
+	    fprintf(stderr, "Error in item ordering; object \n%llx >= \n%llux\n", 
+		    (long long unsigned int)
+		    (H_Hash_RO(node->items[node->size - 1].obj)->hk64[HK64I(0)]), 
+		    (long long unsigned int)
+		    (H_Hash_RO(hi.obj)->hk64[HK64I(0)]));
 #endif
 
 	assert(Hk_LT(H_Hash_RO(node->items[node->size - 1].obj), H_Hash_RO(hi.obj)));
