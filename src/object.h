@@ -72,6 +72,7 @@ typedef const void*   cobj_ptr;
  *  destroying the objects.
  */
 
+typedef void* (*voidobjectfunc)();
 typedef void* (*unaryobjectfunc)(void *);
 typedef void* (*binaryobjectfunc)(void *, void *);
 typedef void (*nullunaryobjectfunc)(void *);

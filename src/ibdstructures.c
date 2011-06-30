@@ -9,6 +9,7 @@
 #include "hashtable.h"
 #include "hashobject.h"
 #include "optimizations.h"
+#include "ksort.h"
 
 /************************************************************
  *
@@ -18,44 +19,45 @@
 
 /********** IBDGraph **********/
 
-void IBDGraph_Construct(IBDGraph *g)
+void _IBDGraph_Construct(IBDGraph *g)
 {
     g->nodes = NewHashTable();
     g->edges = NewHashTable();
     g->dirty = true;
 }
 
-IBDGraph* NewIBDGraph()
+IBDGraph* NewIBDGraph(long id)
 {
     IBDGraph *g = ALLOCATEIBDGraph();
-    IBDGraph_Construct(g);
+    g->id = id;
+    _IBDGraph_Construct(g);
     return g;
 }
 
-void IBDGraph_Destroy(IBDGraph *g)
+void _IBDGraph_Destroy(IBDGraph *g)
 {
     O_DECREF(g->nodes);
     O_DECREF(g->edges);
 }
 
 /********** IBDGraphNode **********/
-void IBDGraphNode_Construct(IBDGraphNode *n)
+void _IBDGraphNode_Construct(IBDGraphNode *n)
 {
     n->edges = NewHashTable();
 }
 
-void IBDGraphNode_Destroy(IBDGraphNode *n)
+void _IBDGraphNode_Destroy(IBDGraphNode *n)
 {
     O_DECREF(n->edges);
 }
 
 /********** IBDGraphEdge **********/
-void IBDGraphEdge_Construct(IBDGraphEdge *e)
+void _IBDGraphEdge_Construct(IBDGraphEdge *e)
 {
     e->nodes = NewHashTable();
 }
 
-void IBDGraphEdge_Destroy(IBDGraphEdge *e)
+void _IBDGraphEdge_Destroy(IBDGraphEdge *e)
 {
     O_DECREF(e->nodes);
 }
@@ -93,22 +95,22 @@ void _IBDGraphEdgeReference_Destroy(_IBDGraphEdgeReference *er)
 DEFINE_OBJECT(
     /* Name. */     IBDGraph,
     /* BaseType */  HashObject,
-    /* construct */ IBDGraph_Construct,
-    /* delete */    IBDGraph_Destroy,
+    /* construct */ _IBDGraph_Construct,
+    /* delete */    _IBDGraph_Destroy,
     /* Duplicate */ NULL);
 
 DEFINE_OBJECT(
     /* Name. */     IBDGraphNode,
     /* BaseType */  HashObject,
-    /* construct */ IBDGraphNode_Construct,
-    /* delete */    IBDGraphNode_Destroy,
+    /* construct */ _IBDGraphNode_Construct,
+    /* delete */    _IBDGraphNode_Destroy,
     /* Duplicate */ NULL);
 
 DEFINE_OBJECT(
     /* Name. */     IBDGraphEdge,
     /* BaseType */  HashObject,
-    /* construct */ IBDGraphEdge_Construct,
-    /* delete */    IBDGraphEdge_Destroy,
+    /* construct */ _IBDGraphEdge_Construct,
+    /* delete */    _IBDGraphEdge_Destroy,
     /* Duplicate */ NULL);
 
 DEFINE_OBJECT(
@@ -477,3 +479,289 @@ void IBDGraph_debug_Print(IBDGraph *g)
     Ht_debug_Print(g->graph_hashes);
 }
 
+/********************************************************************************
+ *
+ *   Now for higher level processing.
+ *
+ ********************************************************************************/
+
+DEFINE_NEW_SEQUENCE_OBJECT(IBDGraphList, HashObject, HASHOBJECT_ITEMS, 
+			   IBDGraph*, Igl, 8, true);
+
+
+/* Gives an IBDGraph, with reference count, to the list. */
+void Igl_Give(IBDGraphList* gl, IBDGraph* g)
+{
+    Igl_Append(gl, g);
+    O_DECREF(g);
+}
+
+/* Adds an IBDGraph to the list; the IBDGraphList adds a reference.*/ 
+void Igl_Add(IBDGraphList* gl, IBDGraph* g)
+{
+    Igl_Append(gl, g);
+}
+
+/* These functions add in the bins. */
+static inline void _IGLBins_AddItem(HashTable *bc, const HashKey *key, IBDGraph* g)
+{
+    IBDGraphList *gl = O_Cast(IBDGraphList, Ht_ViewByKey(bc, *key));
+
+    if(gl == NULL)
+    {
+	gl = NewIBDGraphList();
+	Hf_COPY_FROM_KEY(gl, key);
+	Ht_Give(bc, O_Cast(HashObject, gl));
+    } 
+    
+    Igl_Append(gl, g);
+}
+
+/************************************************************
+ * Now for handling the graph equivalences. 
+ ************************************************************/
+
+void _IBDGraphEquivalences_Destroy(IBDGraphEquivalences* ige)
+{
+    free(ige->classes);
+
+    size_t i;
+    for(i = 0; i < ige->n_graphs; ++i)
+	O_DECREF(ige->graphs[i]);
+
+    free(ige->graphs);
+}
+
+DEFINE_OBJECT(
+    /* Name. */     IBDGraphEquivalences,
+    /* BaseType */  Object,
+    /* construct */ NULL,
+    /* delete */    _IBDGraphEquivalences_Destroy,
+    /* Duplicate */ NULL);
+
+
+IBDGraphEquivalences* NewIBDGraphEquivalences(HashTable *ht, size_t n_graphs)
+{
+    IBDGraphEquivalences *ige = ALLOCATEIBDGraphEquivalences();
+
+    ige->n_classes = Ht_SIZE(ht);
+    ige->classes = (_IBDGraphEquivalenceClass*)malloc(
+	sizeof(_IBDGraphEquivalenceClass) * ige->n_classes);
+    ige->graphs = (IBDGraph**) malloc(sizeof(IBDGraph*) * n_graphs);
+
+    _HashTableInternalIterator hti;
+
+    /* Hash Table stuff -- this one is always valid. */
+    _Hti_INIT(ht, &hti);
+
+    size_t cl_idx = 0, g_idx = 0;
+    IBDGraphList *gl = NULL;
+    
+    while(_Hti_NEXT(O_CastPtr(HashObject, &gl), &hti))
+    {
+	ige->classes[cl_idx].n_graphs = Igl_Size(gl);
+	ige->classes[cl_idx].graphs = &(ige->graphs[g_idx]);
+
+	IBDGraphListIterator gli;
+    	Igli_INIT(gl, &gli);
+
+	IBDGraph *g;
+	while(Igli_NEXT(&g, &gli)) {
+	    O_INCREF(g);
+	    ige->graphs[g_idx++] = g;
+	}
+    
+	++cl_idx;
+    }
+
+    assert(g_idx == n_graphs);
+
+    return ige;
+}
+
+IBDGraphEquivalences* IBDGraphEquivalenceClassesAtMarker(IBDGraphList *gl, markertype m)
+{
+    HashTable *ht = NewHashTable();
+    
+    IBDGraphListIterator gli;
+    IBDGraph* g;
+    Igli_INIT(gl, &gli);
+
+    HashObject h;
+
+    while(Igli_NEXT(&g, &gli))
+    {
+	if(g->dirty)
+	    IBDGraph_Refresh(g);
+
+	Ht_HashAtMarkerPoint(&h, g->graph_hashes, m);
+	_IGLBins_AddItem(ht, H_Hash_RO(&h), g);
+    }
+
+    IBDGraphEquivalences* ige = NewIBDGraphEquivalences(ht, Igl_Size(gl));
+    O_DECREF(ht);
+    return ige;
+}
+
+IBDGraphEquivalences* IBDGraphEquivalenceClasses(IBDGraphList *gl)
+{
+    HashTable *ht = NewHashTable();
+    
+    IBDGraphListIterator gli;
+    IBDGraph* g;
+    Igli_INIT(gl, &gli);
+
+    HashObject h;
+
+    while(Igli_NEXT(&g, &gli))
+    {
+	if(g->dirty)
+	    IBDGraph_Refresh(g);
+
+	Ht_HashOfEverything(&h, g->graph_hashes);
+	_IGLBins_AddItem(ht, H_Hash_RO(&h), g);
+    }
+
+    IBDGraphEquivalences* ige = NewIBDGraphEquivalences(ht, Igl_Size(gl));
+    O_DECREF(ht);
+    return ige;
+}
+
+IBDGraphEquivalences* IBDGraphEquivalenceClassesOfMarkerRange(IBDGraphList *gl, markertype start, markertype end)
+{
+    HashTable *ht = NewHashTable();
+    
+    IBDGraphListIterator gli;
+    IBDGraph* g;
+    Igli_INIT(gl, &gli);
+
+    HashObject h;
+
+    while(Igli_NEXT(&g, &gli))
+    {
+	if(g->dirty)
+	    IBDGraph_Refresh(g);
+
+	Ht_HashOfMarkerRange(&h, g->graph_hashes, start, end);
+	_IGLBins_AddItem(ht, H_Hash_RO(&h), g);
+    }
+
+    IBDGraphEquivalences* ige = NewIBDGraphEquivalences(ht, Igl_Size(gl));
+    O_DECREF(ht);
+    return ige;
+}
+
+LOCAL_MEMORY_POOL(IGEIterator);
+
+IGEIterator *Igei_New(IBDGraphEquivalences *ige)
+{
+    IGEIterator* igei = Mp_NewIGEIterator();
+    igei->ige = ige;
+    O_INCREF(ige);
+
+    igei->next_graph_index = 0;
+    igei->next_class_index = 0;
+    igei->n_left_in_class = unlikely(ige->n_classes == 0) ? 0 : ige->classes[0].n_graphs;
+    assert(igei->n_left_in_class != 0);
+
+    return igei;
+}
+
+/* Fills the values pointed to by ibd_graph and equivalence_class with
+ * the next ones in the sequence.  Returns false when there are no
+ * more (no values filled then). */
+
+bool Igei_Next(IBDGraph **ibd_graph, size_t* equivalence_class, IGEIterator *igei)
+{
+    if(unlikely(igei->next_graph_index == igei->ige->n_graphs))
+	return false;
+
+    (*equivalence_class) = igei->next_class_index;
+    (*ibd_graph) = igei->ige->graphs[igei->next_graph_index];
+    
+    ++igei->next_graph_index;
+    
+    /* Can't set the next graph if there is no next graph. */
+    if(likely(igei->next_graph_index != igei->ige->n_graphs))
+    {
+	if( (--(igei->n_left_in_class)) == 0)
+	{
+	    ++igei->next_class_index;
+	    assert(igei->next_class_index != igei->ige->n_classes);
+	    
+	    igei->n_left_in_class = igei->ige->classes[igei->next_class_index].n_graphs;
+	    assert(igei->n_left_in_class != 0);
+	}
+    }
+
+    return true;
+}
+
+/* Call when things are done to clean up the iterator. */
+void Igei_Finish(IGEIterator *igei)
+{
+    O_DECREF(igei->ige);
+    Mp_FreeIGEIterator(igei);
+}
+
+/********************************************************************************
+ *
+ * A convenience function to sort all the inputs. 
+ *
+ ********************************************************************************/
+
+typedef IBDGraph* ibdgraph_cptr;
+typedef _IBDGraphEquivalenceClass* ibdgraph_ec_cptr;
+
+static inline bool _IBDGraph_within_class_lt(ibdgraph_cptr g1, ibdgraph_cptr g2)
+{
+    return (g1->id < g2->id);
+}
+
+static inline bool _IBDGraph_between_class_lt(_IBDGraphEquivalenceClass gc1, 
+					      _IBDGraphEquivalenceClass gc2)
+{
+    return  ((gc1.n_graphs == gc2.n_graphs) 
+	     ? (gc1.graphs[0]->id < gc2.graphs[0]->id) 
+	     : (gc1.n_graphs < gc2.n_graphs));
+}
+
+KSORT_INIT(within_class, ibdgraph_cptr, _IBDGraph_within_class_lt);
+KSORT_INIT(between_class, _IBDGraphEquivalenceClass, _IBDGraph_between_class_lt);
+
+void IBDGraphEquivalences_InplaceSort(IBDGraphEquivalences* ige)
+{
+    size_t i;
+    for(i = 0; i < ige->n_classes; ++i) 
+	ks_introsort_within_class(ige->classes[i].n_graphs, ige->classes[i].graphs);
+
+    ks_introsort_between_class(ige->n_classes, ige->classes);
+
+    /* Now have to rearrange the graphs in the list so they correspond
+     * to the classes, in order. */
+
+    IBDGraph** graph_buf = (IBDGraph**) malloc(sizeof(IBDGraph*) * ige->n_graphs);
+    
+    size_t j, pos = 0;
+    for(i = 0; i < ige->n_classes; ++i) 
+	for(j = 0; j < ige->classes[i].n_graphs; ++j) 
+	    graph_buf[pos++] = ige->classes[i].graphs[j];
+
+    free(ige->graphs);
+
+    ige->graphs = graph_buf;
+}
+
+void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige)
+{
+    size_t i, j;
+    for(i = 0; i < ige->n_classes; ++i) 
+    {
+	printf("%ld\t : ", (unsigned long)ige->classes[i].n_graphs);
+
+	for(j = 0; j < ige->classes[i].n_graphs; ++j) 
+	    printf("%ld, ", ige->classes[i].graphs[j]->id);
+	
+	printf("\n");
+    }
+}

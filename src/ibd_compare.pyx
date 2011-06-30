@@ -9,7 +9,7 @@ cdef extern from "ibd_fatpack.c":
     ctypedef long markertype
     ctypedef void HashObject
 
-    IBDGraph* NewIBDGraph()
+    IBDGraph* NewIBDGraph(long id)
     IBDGraphNode* IBDGraphNodeByName(IBDGraph *g, char *name)
     IBDGraphNode* IBDGraphNodeByNumber(IBDGraph *g, long number)
 
@@ -70,8 +70,8 @@ cdef class EdgeDef:
 cdef class IBDGraphWrapper:
     cdef IBDGraph *g
 
-    def __init__(self):
-        self.g = NewIBDGraph()
+    def __init__(self, long id):
+        self.g = NewIBDGraph(id)
 
     cdef IBDGraphEdge* _getEdge(self, int name):
         return IBDGraphEdgeByNumber(self.g, name)
@@ -109,13 +109,13 @@ cdef class IBDGraphWrapper:
         return s
 
 
-cdef IBDGraphWrapper createIBDGraph(list ed_l1, list ed_l2):
+cdef IBDGraphWrapper createIBDGraph(long id, list ed_l1, list ed_l2):
     """
     Connections is a list of 3-tuples of (edge, base_node,
     change_list).
     """
 
-    cdef IBDGraphWrapper g = IBDGraphWrapper()
+    cdef IBDGraphWrapper g = IBDGraphWrapper(id)
 
     cdef size_t i
 
@@ -245,7 +245,8 @@ cdef list parse_F1_string(str string):
 
         step = len(working_set)
 
-        ibd_graphs.append(createIBDGraph(ed_l1[cur_pos:cur_pos+step],
+        ibd_graphs.append(createIBDGraph(len(ibd_graphs),
+                                         ed_l1[cur_pos:cur_pos+step],
                                          ed_l2[cur_pos:cur_pos+step]))
 
         cur_pos += step

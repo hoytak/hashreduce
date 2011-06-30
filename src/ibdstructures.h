@@ -3,11 +3,13 @@
 
 #include "hashobject.h"
 #include "hashtable.h"
+#include "sequences.h"
 
 /********** IBDGraph **********/
 
 typedef struct {
     HASHOBJECT_ITEMS;
+    long id;
     HashTable *nodes, *edges, *graph_hashes;
     HashObject *current_hash;
     bool dirty;
@@ -58,7 +60,7 @@ DECLARE_OBJECT(_IBDGraphEdgeReference);
  ********************************************************************************/
 
 /* Creates and returns a new, empty IBD graph structure.  */
-IBDGraph* NewIBDGraph();
+IBDGraph* NewIBDGraph(long id);
 
 /* Retrieves or creates nodes in the ibd graphs. */
 IBDGraphNode* IBDGraphNodeByName(IBDGraph *g, const char *name);
@@ -99,6 +101,105 @@ markertype IBDGraphInvariantRegionUpper(IBDGraph *g1, markertype m);
  * external) edge or node is also present in this graph. */ 
 bool IBDGraphContainsEdge(IBDGraph *g, IBDGraphEdge *e);
 bool IBDGraphContainsNode(IBDGraph *g, IBDGraphNode *n);
+
+/********************************************************************************
+ *
+ *   Routines for doing processing over collections of graph objects.
+ *   The primary class here is a collection class, which holds an
+ *   ordered collection of graphs.  Operations can be done on this
+ *   graph class.
+ *
+ ********************************************************************************/
+
+DECLARE_NEW_SEQUENCE_OBJECT(IBDGraphList, HashObject, HASHOBJECT_ITEMS, 
+			    IBDGraph*, Igl, 8, true);
+
+/* Creates a new, empty graph list.*/
+IBDGraphList* NewIBDGraphList(); 
+
+/* Gives an IBDGraph, with reference count, to the list. */
+void Igl_Give(IBDGraphList* gl, IBDGraph* g);
+
+/* Adds an IBDGraph to the list; the IBDGraphList adds a reference.*/ 
+void Igl_Add(IBDGraphList* gl, IBDGraph* g);
+
+/* Returns the size of the IBDGraphList collection. */
+static inline size_t Igl_Size(const IBDGraphList* gl);
+
+/************************************************************
+ *
+ *   Routines for obtaining collections of hashes.
+ *
+ ************************************************************/
+
+/* Define a class that allows for accumulating groups of classes. */
+
+typedef struct {
+    IBDGraph **graphs;
+    size_t n_graphs;
+}_IBDGraphEquivalenceClass;
+
+typedef struct {
+    OBJECT_ITEMS;
+    size_t n_graphs;
+    size_t n_classes;
+    _IBDGraphEquivalenceClass *classes;
+    IBDGraph **graphs;
+} IBDGraphEquivalences;
+
+DECLARE_OBJECT(IBDGraphEquivalences);
+
+/* Returns collections of IBD graphs in which the graphs are
+ * identical at a given marker value.. */
+
+IBDGraphEquivalences* IBDGraphEquivalenceClassesAtMarker(IBDGraphList *gl, markertype m);
+
+/* Returns collections of IBD graphs in which the graphs are the same
+ * throughout the given marker range. */
+
+IBDGraphEquivalences* IBDGraphEquivalenceClassesOfMarkerRange(
+    IBDGraphList *gl, markertype start, markertype end);
+
+/* Returns collections of IBD graphs in which the graphs are
+ * completely identical. */
+
+IBDGraphEquivalences* IBDGraphEquivalenceClasses(IBDGraphList *gl);
+
+/* A convenience iterator for iterating through equivalence
+ * classes. */
+
+typedef struct {
+    MEMORY_POOL_ITEMS;
+    IBDGraphEquivalences *ige;
+    size_t next_graph_index;
+    size_t next_class_index;
+    size_t n_left_in_class;
+}IGEIterator;
+
+
+/* Creates a new graph equivalences deal. */
+IGEIterator *Igei_New(IBDGraphEquivalences *ige);
+
+/* Fills the values pointed to by ibd_graph and equivalence_class with
+ * the next ones in the sequence.  Returns false when there are no
+ * more (no values filled then). */
+
+bool Igei_Next(IBDGraph **ibd_graph, size_t* equivalence_class, IGEIterator *igei);
+
+/* Call when things are done to clean up the iterator. */
+void Igei_Finish(IGEIterator *igei);
+
+
+/********************************************************************************
+ *
+ *  Convenience functions to sort and print equivalence classes; works
+ *  on id's and class sizes.
+ *
+ ********************************************************************************/
+
+void IBDGraphEquivalences_InplaceSort(IBDGraphEquivalences* ige);
+
+void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige);
 
 /************************************************************
  *
