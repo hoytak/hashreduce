@@ -184,6 +184,14 @@ IBDGraphNode* IBDGraphNodeByNumber(IBDGraph *g, signed long number)
     return n;
 }
 
+IBDGraphNode* IBDGraphNodeByHashKey(IBDGraph *g, HashKey key)
+{
+    assert(g != NULL);
+    IBDGraphNode* n = _IBDGraphNodeByKey(g, key);
+    assert(Ht_ContainsByKey(g->nodes, key));
+    return n;
+}
+
 /********  Edge Retrieval / Construction ********/
 
 static inline IBDGraphEdge* _IBDGraphEdgeByKey(IBDGraph *g, HashKey key)
@@ -229,6 +237,12 @@ IBDGraphEdge* IBDGraphEdgeByNumber(IBDGraph *g, signed long number)
 {
     assert(g != NULL);
     return _IBDGraphEdgeByKey(g, Hk_FromInt(number));
+}
+
+IBDGraphEdge* IBDGraphEdgeByHashKey(IBDGraph *g, HashKey key)
+{
+    assert(g != NULL);
+    return _IBDGraphEdgeByKey(g, key);
 }
 
 
@@ -426,9 +440,19 @@ bool IBDGraphContainsEdge(IBDGraph *g, IBDGraphEdge *e)
     return Ht_Contains(g->edges, O_Cast(HashObject, e));
 }
 
+bool IBDGraphContainsEdgeWithHashKey(IBDGraph *g, HashKey key)
+{
+    return Ht_ContainsByKey(g->edges, key);
+}
+
 bool IBDGraphContainsNode(IBDGraph *g, IBDGraphNode *n)
 {
     return Ht_Contains(g->nodes, O_Cast(HashObject, n));
+}
+
+bool IBDGraphContainsNodeWithHashKey(IBDGraph *g, HashKey key)
+{
+    return Ht_ContainsByKey(g->nodes, key);
 }
     
 /************************************************************

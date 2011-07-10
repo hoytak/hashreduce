@@ -65,10 +65,12 @@ IBDGraph* NewIBDGraph(long id);
 /* Retrieves or creates nodes in the ibd graphs. */
 IBDGraphNode* IBDGraphNodeByName(IBDGraph *g, const char *name);
 IBDGraphNode* IBDGraphNodeByNumber(IBDGraph *g, signed long number);
+IBDGraphNode* IBDGraphNodeByHashKey(IBDGraph *g, HashKey key);
 
 /* Retrieves or creates edges in the ibd graph */
 IBDGraphEdge* IBDGraphEdgeByName(IBDGraph *g, const char *name);
 IBDGraphEdge* IBDGraphEdgeByNumber(IBDGraph *g, signed long number);
+IBDGraphEdge* IBDGraphEdgeByHashKey(IBDGraph *g, HashKey key);
 
 /* Attaches an edge to a given node for a specified range of time. Set
  * the markers to MARKER_PLUS_INFTY or MARKER_MINUS_INFTY to denote
@@ -100,7 +102,9 @@ markertype IBDGraphInvariantRegionUpper(IBDGraph *g1, markertype m);
 /* These functions can be used for testing whether a (possibly
  * external) edge or node is also present in this graph. */ 
 bool IBDGraphContainsEdge(IBDGraph *g, IBDGraphEdge *e);
+bool IBDGraphContainsEdgeWithHashKey(IBDGraph *g, HashKey key);
 bool IBDGraphContainsNode(IBDGraph *g, IBDGraphNode *n);
+bool IBDGraphContainsNodeWithHashKey(IBDGraph *g, HashKey key);
 
 /********************************************************************************
  *
@@ -197,8 +201,10 @@ void Igei_Finish(IGEIterator *igei);
  *
  ********************************************************************************/
 
+/* call first */
 void IBDGraphEquivalences_InplaceSort(IBDGraphEquivalences* ige);
 
+/* prints output */
 void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige);
 
 /************************************************************
@@ -208,6 +214,8 @@ void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige);
  ************************************************************/
 
 void IBDGraph_debug_Print(IBDGraph *g);
+void IBDGraph_Print(IBDGraph *g);
+
 
 #endif
 
