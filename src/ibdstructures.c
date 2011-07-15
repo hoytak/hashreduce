@@ -529,15 +529,22 @@ void Igl_Add(IBDGraphList* gl, IBDGraph* g)
 /* These functions add in the bins. */
 static inline void _IGLBins_AddItem(HashTable *bc, const HashKey *key, IBDGraph* g)
 {
-    IBDGraphList *gl = O_Cast(IBDGraphList, Ht_ViewByKey(bc, *key));
+    assert(bc != NULL);
 
-    if(gl == NULL)
+    HashObject *h = Ht_ViewByKey(bc, *key);
+    IBDGraphList *gl;
+
+    if(h == NULL)
     {
 	gl = NewIBDGraphList();
 	Hf_COPY_FROM_KEY(gl, key);
 	Ht_Give(bc, O_Cast(HashObject, gl));
-    } 
-    
+    }
+    else
+    {
+	gl = O_Cast(IBDGraphList, h);
+    }
+
     Igl_Append(gl, g);
 }
 
@@ -635,19 +642,20 @@ IBDGraphEquivalences* IBDGraphEquivalenceClasses(IBDGraphList *gl)
     IBDGraph* g;
     Igli_INIT(gl, &gli);
 
-    HashObject h;
+    HashObject* h = NewHashObject();
 
     while(Igli_NEXT(&g, &gli))
     {
 	if(g->dirty)
 	    IBDGraph_Refresh(g);
 
-	Ht_HashOfEverything(&h, g->graph_hashes);
-	_IGLBins_AddItem(ht, H_Hash_RO(&h), g);
+	Ht_HashOfEverything(h, g->graph_hashes);
+	_IGLBins_AddItem(ht, H_Hash_RO(h), g);
     }
 
     IBDGraphEquivalences* ige = NewIBDGraphEquivalences(ht, Igl_Size(gl));
     O_DECREF(ht);
+    O_DECREF(h);
     return ige;
 }
 
@@ -659,19 +667,20 @@ IBDGraphEquivalences* IBDGraphEquivalenceClassesOfMarkerRange(IBDGraphList *gl, 
     IBDGraph* g;
     Igli_INIT(gl, &gli);
 
-    HashObject h;
+    HashObject* h = NewHashObject();
 
     while(Igli_NEXT(&g, &gli))
     {
 	if(g->dirty)
 	    IBDGraph_Refresh(g);
 
-	Ht_HashOfMarkerRange(&h, g->graph_hashes, start, end);
-	_IGLBins_AddItem(ht, H_Hash_RO(&h), g);
+	Ht_HashOfMarkerRange(h, g->graph_hashes, start, end);
+	_IGLBins_AddItem(ht, H_Hash_RO(h), g);
     }
 
     IBDGraphEquivalences* ige = NewIBDGraphEquivalences(ht, Igl_Size(gl));
     O_DECREF(ht);
+    O_DECREF(h);
     return ige;
 }
 

@@ -69,7 +69,7 @@
 	}								\
 	else								\
 	{								\
-	    assert(end_node->size < _HS_NODE_SIZE);			\
+	    assert(end_node->size < count);				\
 	    end_node->items[end_node->size] = h;			\
 	    ++(end_node->size);						\
 	    ++(hs->size);						\

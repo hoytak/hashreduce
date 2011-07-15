@@ -174,14 +174,17 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 									\
     static inline void _Tc_##ObjectType##_TypeCheck(			\
 	cobj_ptr _h, const char* file, const char* funcname,		\
-	unsigned long linenumber)					\
+	unsigned long linenumber, bool check_null)			\
     {									\
 	if(IN_DEBUG_MODE)						\
 	{								\
 	    const Object *h = (const Object*)_h;			\
 									\
 	    if(unlikely(h == NULL))					\
-		_Tc_##ObjectType##_NullErrorMessage(file, funcname, linenumber); \
+	    {								\
+		if(check_null)						\
+		    _Tc_##ObjectType##_NullErrorMessage(file, funcname, linenumber); \
+	    }								\
 	    else if(unlikely((!_OBJECT_MAGIC_NUMBER_MATCHES(h))		\
 			     || !O_IsType(ObjectType, h)))		\
 		_Tc_##ObjectType##_CastErrorMessage(h, file, funcname, linenumber); \
@@ -334,22 +337,25 @@ bool O_ObjectIsValue(void *obj);
  *
  ************************************************************/
 
+#define O_TypeCheckNoNull(ObjectType, obj)			\
+  _Tc_##ObjectType##_TypeCheck(obj,__FILE__, __func__, __LINE__, false)
+
 #define O_TypeCheck(ObjectType, obj)					\
-    _Tc_##ObjectType##_TypeCheck(obj,__FILE__, __func__, __LINE__)
+  _Tc_##ObjectType##_TypeCheck(obj,__FILE__, __func__, __LINE__, true)
 
 #ifndef NDEBUG
 
 #define O_Cast(ObjectType, obj)					\
-    (O_TypeCheck(ObjectType, (obj)), (ObjectType*)(obj))
+  (O_TypeCheck(ObjectType, (obj)), (ObjectType*)(obj))
 
 #define O_CastPtr(ObjectType, obj)				\
-    (O_TypeCheck(ObjectType, (*(Object**)obj)), (ObjectType**)(obj))
+  (O_TypeCheckNoNull(ObjectType, (*(Object**)obj)), (ObjectType**)(obj))
 
 #define O_CastC(ObjectType, obj)				\
-    (O_TypeCheck(ObjectType, (obj)), (const ObjectType*)(obj))
+  (O_TypeCheck(ObjectType, (obj)), (const ObjectType*)(obj))
 
 #define O_CastCPtr(ObjectType, obj)					\
-    (O_TypeCheck(ObjectType, (*(Object**)obj)), (const ObjectType*)(obj))
+  (O_TypeCheckNoNull(ObjectType, (*(Object**)obj)), (const ObjectType*)(obj))
 
 #else
 
