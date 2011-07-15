@@ -579,6 +579,7 @@ IBDGraphEquivalences* NewIBDGraphEquivalences(HashTable *ht, size_t n_graphs)
     ige->classes = (_IBDGraphEquivalenceClass*)malloc(
 	sizeof(_IBDGraphEquivalenceClass) * ige->n_classes);
     ige->graphs = (IBDGraph**) malloc(sizeof(IBDGraph*) * n_graphs);
+    ige->n_graphs = n_graphs;
 
     _HashTableInternalIterator hti;
 
@@ -596,14 +597,52 @@ IBDGraphEquivalences* NewIBDGraphEquivalences(HashTable *ht, size_t n_graphs)
 	IBDGraphListIterator gli;
     	Igli_INIT(gl, &gli);
 
+	size_t count = 0;
 	IBDGraph *g;
 	while(Igli_NEXT(&g, &gli)) {
 	    O_INCREF(g);
 	    ige->graphs[g_idx++] = g;
+	    assert(ige->classes[cl_idx].graphs[count] == g);
+
+	    ++count;
 	}
+
+	assert(count == Igl_Size(gl));
     
 	++cl_idx;
     }
+
+#ifdef RUN_CONSISTENCY_CHECKS
+
+    IGEIterator *it = Igei_New(ige);
+
+    IBDGraph *g;
+    size_t equivalence_class = 0, prev_equivalence_class = -1;
+    size_t n_graphs_tested = 0, n_classes_tested = 0;
+
+    while(Igei_Next(&g, &equivalence_class, it)) 
+    {
+	if(prev_equivalence_class != equivalence_class)
+	{
+	    prev_equivalence_class = equivalence_class;
+	    assert(ige->graphs[n_graphs_tested] == ige->classes[n_classes_tested].graphs[0]);
+	    ++n_classes_tested;
+	}
+
+	++n_graphs_tested;
+
+	assert(g != NULL);
+
+	// printf("class = %ld, graph = %ld, id = %d\n", n_classes_tested, n_graphs_tested, g->id);
+    }
+
+    Igei_Finish(it);
+
+    assert(n_graphs_tested == n_graphs);
+    assert(ige->n_graphs = n_graphs);
+    assert(n_classes_tested == ige->n_classes);
+
+#endif
 
     assert(g_idx == n_graphs);
 
@@ -783,7 +822,16 @@ void IBDGraphEquivalences_InplaceSort(IBDGraphEquivalences* ige)
     free(ige->graphs);
 
     ige->graphs = graph_buf;
+
+    /* And need to rebuild the class pointers too. */
+    pos = 0;
+    for(i = 0; i < ige->n_classes; ++i)
+    {
+	ige->classes[i].graphs = &(ige->graphs[pos]);
+	pos += ige->classes[i].n_graphs;
+    }
 }
+	
 
 void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige)
 {
@@ -792,9 +840,9 @@ void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige)
     {
 	printf("%ld\t : ", (unsigned long)ige->classes[i].n_graphs);
 
-	for(j = 0; j < ige->classes[i].n_graphs; ++j) 
+	for(j = 0; j < ige->classes[i].n_graphs - 1; ++j) 
 	    printf("%ld, ", ige->classes[i].graphs[j]->id);
-	
-	printf("\n");
+
+	printf("%ld\n", ige->classes[i].graphs[j]->id);
     }
 }
