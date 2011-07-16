@@ -8,6 +8,7 @@ endif()
 
 option(ENABLE_CHECKS "Enable internal consistency checks for debugging (very slow)." "No")
 option(BUILD_IBD "Enable building of ibd graph related features." "Yes")
+option(BUILD_C_IBD_COMPARE "Enable building of ibd graph C-only library related features (rather than python version)." "Yes")
 option(PYTHON_LINK_STATIC "Link against the python libraries statically." "No")
 
 if(NOT CMAKE_INSTALL_PREFIX)
@@ -138,37 +139,52 @@ else()
 endif()
 
 if(BUILD_IBD)
-  find_package(PythonLibs)
-  if(NOT PYTHONLIBS_FOUND)
-    error("Python development headers not found; necessary for compiling ibd graph connection program.")
-  else()
-    if(NOT PYTHON_INCLUDE_DIRS)
-      set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_PATH}")
-    endif()
-
-    # # need to use static linkage if possible
-    # get_filename_component(_lib "${PYTHON_LIBRARIES}" NAME)
-    # string(REPLACE "lib" "" _lib "${_lib}")
-
-    # a HACK
-    string(REPLACE ".so" ".a" PYTHON_STATIC_LIBRARY "${PYTHON_LIBRARIES}")
-
-    if(PYTHON_LINK_STATIC) 
-      if(EXISTS "${PYTHON_STATIC_LIBRARY}")
-	message("Found static python library, linking against that.")
-	SET(PYTHON_LIBRARY, PYTHON_STATIC_LIBRARY)
-      else()
-	message("Did not find static python library, linking against dynamic.  Executable is less portable.")
-	SET(PYTHON_LIBRARY, PYTHON_LIBRARIES)
-      endif()
-    endif()
-    # get_filename_component(PYTHON_LIBRARY_PATH "${PYTHON_LIBRARIES}" PATH)
-
-    message("Python headers found in ${PYTHON_INCLUDE_DIRS} ")
-  endif()
 endif()
 
 ################################################################################
+
+if(BUILD_IBD)
+  if(BUILD_C_IBD_COMPARE)
+
+    add_executable(ibd_compare src/ibd_compare_c.c)
+    target_link_libraries(ibd_compare m)
+
+  else()
+    find_package(PythonLibs)
+    if(NOT PYTHONLIBS_FOUND)
+      error("Python development headers not found; necessary for compiling ibd graph connection program.")
+    else()
+      if(NOT PYTHON_INCLUDE_DIRS)
+	set(PYTHON_INCLUDE_DIRS "${PYTHON_INCLUDE_PATH}")
+      endif()
+
+      # # need to use static linkage if possible
+      # get_filename_component(_lib "${PYTHON_LIBRARIES}" NAME)
+      # string(REPLACE "lib" "" _lib "${_lib}")
+
+      # a HACK
+      string(REPLACE ".so" ".a" PYTHON_STATIC_LIBRARY "${PYTHON_LIBRARIES}")
+
+      if(PYTHON_LINK_STATIC) 
+	if(EXISTS "${PYTHON_STATIC_LIBRARY}")
+	  message("Found static python library, linking against that.")
+	  SET(PYTHON_LIBRARY, PYTHON_STATIC_LIBRARY)
+	else()
+	  message("Did not find static python library, linking against dynamic.  Executable is less portable.")
+	  SET(PYTHON_LIBRARY, PYTHON_LIBRARIES)
+	endif()
+      endif()
+      # get_filename_component(PYTHON_LIBRARY_PATH "${PYTHON_LIBRARIES}" PATH)
+
+      message("Python headers found in ${PYTHON_INCLUDE_DIRS} ")
+    endif()
+
+    include_directories(${PYTHON_INCLUDE_DIRS})
+    add_executable(ibd_compare src/ibd_compare.c)
+    target_link_libraries(ibd_compare "${PYTHON_LIBRARY}" m)
+    install(TARGETS ibd_compare DESTINATION bin)
+  endif()
+endif()
 
 add_subdirectory(src)
 
@@ -177,13 +193,6 @@ install(
   DESTINATION "${CMAKE_INSTALL_PREFIX}/include/hashreduce"
   FILES_MATCHING PATTERN "*.h" 
 )
-
-if(BUILD_IBD)
-  include_directories(${PYTHON_INCLUDE_DIRS})
-  add_executable(ibd_compare src/ibd_compare.c)
-  target_link_libraries(ibd_compare "${PYTHON_LIBRARY}" m)
-  install(TARGETS ibd_compare DESTINATION bin)
-endif()
 
 message("")
 message("Configured HashReduce.")

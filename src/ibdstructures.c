@@ -371,6 +371,8 @@ void IBDGraphInvariantRegion(markertype *start, markertype *end, IBDGraph *g, ma
     
     HashTableMarkerIterator htmi;
     HashValidityItem hvi;
+    hvi.start = 0;
+    hvi.end = 0;
 
     Htmi_INIT(g->graph_hashes, &htmi);
 
