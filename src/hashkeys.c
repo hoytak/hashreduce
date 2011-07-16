@@ -708,8 +708,10 @@ void Hk_ExtractHash(char* dest_string, chk_ptr hk)
 	int idx1 = 2*hi;
 	int idx2 = 2*hi + 1;
 
-	dest[idx1] = map[getBitGroup(hk->hk8[hi], 0, 4)];
-	dest[idx2] = map[getBitGroup(hk->hk8[hi], 4, 4)];
+	char c = hk->hk8[hi];
+
+	dest[idx1] = map[c & 0x0f];
+	dest[idx2] = map[(c >> 4) & 0x0f];
     }
 
 #if(PLATFORM_BYTE_ORDER == IS_LITTLE_ENDIAN)

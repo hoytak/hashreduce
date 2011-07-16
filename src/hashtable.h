@@ -41,7 +41,7 @@
  ********************************************************************************/
 
 #define _HT_ITEMS_PER_NODE 4
-#define _HT_INITIAL_LOG2_SIZE 3
+#define _HT_INITIAL_LOG2_SIZE 2
 
 typedef struct {
     uint64_t hk64;

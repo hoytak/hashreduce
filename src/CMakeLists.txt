@@ -21,7 +21,6 @@ add_library (hashreduce SHARED
   hashtable.h
   markerinfo.c
   markerinfo.h
-  memorypool.c
   memorypool.h
   object.c
   object.h

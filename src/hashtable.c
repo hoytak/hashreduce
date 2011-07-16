@@ -48,12 +48,17 @@ static inline void _Ht_NonTable_Setup(HashTable *ht)
     /* Nothing yet, as it's all cleared to zero. */
 }
 
-static inline void _Ht_Table_Setup(HashTable *ht, unsigned int log2_size)
+static inline size_t _Ht_NextGrowthTrigger(unsigned int log2_size)
+{
+    return (1 << (log2_size + 1));
+}
+
+static void _Ht_Table_Setup(HashTable *ht, unsigned int log2_size)
 {
     ht->_table_log2_size = log2_size;
     ht->_table_shift = 64 - log2_size;
     ht->_table_size = (1 << (ht->_table_log2_size));
-    ht->_table_grow_trigger_size = (1 << (1 + ht->_table_log2_size));
+    ht->_table_grow_trigger_size = _Ht_NextGrowthTrigger(ht->_table_log2_size);
     ht->table = (_HT_Node*)malloc(sizeof(_HT_Node)*(ht->_table_size));
     CHECK_MALLOC(ht->table);
     memset(ht->table, 0, sizeof(_HT_Node)*(ht->_table_size));
@@ -92,7 +97,7 @@ inline void _Ht_debug_HashTableConsistent(ht_crptr ht) {}
 #endif
 
 /* Destructor method; called when the table is no longer needed. */
-static inline void _Ht_Table_DeallocateChain(_HT_Independent_Node *);
+static void _Ht_Table_DeallocateChain(_HT_Independent_Node *);
 void _Ht_MSL_Drop(HashTable *ht);
 
 void _Ht_Destroy(HashTable *ht)
@@ -136,7 +141,7 @@ DEFINE_OBJECT(
  * excluding individual operations on the nodes.
  ************************************************************/
 
-static inline size_t _Ht_Table_Index(ht_crptr ht, uint64_t hk64)
+static size_t _Ht_Table_Index(ht_crptr ht, uint64_t hk64)
 {
     size_t idx = (size_t)(hk64 >> (ht->_table_shift));
 
