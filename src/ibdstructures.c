@@ -657,16 +657,18 @@ IBDGraphEquivalences* IBDGraphEquivalenceClassesAtMarker(IBDGraphList *gl, marke
     IBDGraph* g;
     Igli_INIT(gl, &gli);
 
-    HashObject h;
+    HashObject *h = NewHashObject();
 
     while(Igli_NEXT(&g, &gli))
     {
 	if(g->dirty)
 	    IBDGraph_Refresh(g);
 
-	Ht_HashAtMarkerPoint(&h, g->graph_hashes, m);
-	_IGLBins_AddItem(ht, H_Hash_RO(&h), g);
+	Ht_HashAtMarkerPoint(h, g->graph_hashes, m);
+	_IGLBins_AddItem(ht, H_Hash_RO(h), g);
     }
+
+    O_DECREF(h);
 
     IBDGraphEquivalences* ige = NewIBDGraphEquivalences(ht, Igl_Size(gl));
     O_DECREF(ht);
