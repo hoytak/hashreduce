@@ -60,9 +60,8 @@ static void _Ht_Table_Setup(HashTable *ht, unsigned int log2_size)
     ht->_table_shift = 64 - log2_size;
     ht->_table_size = (1 << (ht->_table_log2_size));
     ht->_table_grow_trigger_size = _Ht_NextGrowthTrigger(ht->_table_log2_size);
-    ht->table = (_HT_Node*)malloc(sizeof(_HT_Node)*(ht->_table_size));
+    ht->table = (_HT_Node*)calloc(ht->_table_size, sizeof(_HT_Node));
     CHECK_MALLOC(ht->table);
-    memset(ht->table, 0, sizeof(_HT_Node)*(ht->_table_size));
 }
 
 void _Ht_HashTable_Constructor(HashTable *ht)

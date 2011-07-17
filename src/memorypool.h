@@ -27,9 +27,38 @@
 	size_t candidate_page_for_deallocation;				\
     } MemoryPool_##Type;						
 
+static inline bool _MP_IndexMasterPage(size_t idx)	
+{
+    return (idx <= 4) ? true : ((idx & 3) == 0);
+}
+
+static inline size_t _MP_IndexMasterPage_Size(size_t idx)
+{
+    assert(_MP_IndexMasterPage(idx));
+    return (idx < 4) ? 1 : 4;
+}
+
 #define _DECLARE_MEMORY_POOL_BASE_FUNCTIONS(Type)			\
     									\
-    static inline void _MP_MorePages_##Type()				\
+									\
+    static inline void _MP_InitPages_##Type(size_t idx)			\
+    {									\
+	MemoryPool_##Type *mp = &_memorypool_##Type;			\
+	_MP_Page_##Type *mpp = &(mp->pages[idx]);			\
+	size_t num = _MP_IndexMasterPage_Size(idx);			\
+	assert(mpp->memblock == NULL);					\
+									\
+	Type* ptr = (Type*)calloc(bitsizeof(bitfield)*num, sizeof(Type)); \
+	CHECK_MALLOC(ptr);						\
+	size_t i;							\
+	for(i = 0; i < num; ++i)					\
+	{								\
+	    (mpp + i)->memblock = ptr + i*bitsizeof(bitfield);		\
+	    (mpp + i)->available_mask = ~((bitfield)0);			\
+	}								\
+    }									\
+									\
+    static void _MP_MorePages_##Type()					\
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
@@ -41,32 +70,32 @@
 	       (mp->allocated_pages - old_size )* sizeof(_MP_Page_##Type) ); \
     }									\
 									\
-    static inline void _MP_InitPage_##Type(_MP_Page_##Type *mpp)	\
-    {									\
-	assert(mpp->memblock == NULL);					\
-	mpp->memblock = malloc(sizeof(Type) * bitsizeof(bitfield));	\
-	memset(mpp->memblock, 0, sizeof(Type) * bitsizeof(bitfield));	\
-	mpp->available_mask = ~((bitfield)0);				\
-    }									\
-									\
     static void _MP_Init_##Type()					\
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
 	mp->allocated_pages = 32;					\
 	mp->first_page_with_free_spot = 0;				\
-	mp->pages = (_MP_Page_##Type*)malloc(mp->allocated_pages * sizeof(_MP_Page_##Type) ); \
-	memset(mp->pages, 0, mp->allocated_pages * sizeof(_MP_Page_##Type) ); \
-	_MP_InitPage_##Type(&(mp->pages[0]));				\
+	mp->pages = (_MP_Page_##Type*)calloc(mp->allocated_pages, sizeof(_MP_Page_##Type) ); \
+	_MP_InitPages_##Type(0);					\
     }									\
 									\
-    static inline void _MP_ClearPage_##Type(_MP_Page_##Type *mpp)	\
+    static inline void _MP_ClearPages_##Type(size_t idx)		\
     {									\
+	MemoryPool_##Type *mp = &_memorypool_##Type;			\
+									\
+	_MP_Page_##Type *mpp = &(mp->pages[idx]);			\
+	size_t num = _MP_IndexMasterPage_Size(idx);			\
+									\
 	assert(mpp->memblock != NULL);					\
 	assert(mpp->available_mask == ~((bitfield)0));			\
 	free(mpp->memblock);						\
-	mpp->available_mask = 0;					\
-	mpp->memblock = NULL;						\
+	size_t i;							\
+	for(i = 0; i < num; ++i)					\
+	{								\
+	    (mpp + i)->available_mask = 0;				\
+	    (mpp + i)->memblock = NULL;					\
+	}								\
     }									\
 									\
     static void _MP_AdvancePagePointer_##Type()				\
@@ -74,27 +103,36 @@
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
 	assert(mp->first_page_with_free_spot < mp->allocated_pages);	\
+	assert(isPowerOf2(mp->allocated_pages));			\
 									\
 	while(true)							\
 	{								\
-	    assert(mp->pages[mp->first_page_with_free_spot].memblock != NULL); \
+	    assert(NULL!=mp->pages[mp->first_page_with_free_spot].memblock); \
 	    assert(mp->pages[mp->first_page_with_free_spot].available_mask == 0); \
 									\
 	    ++mp->first_page_with_free_spot;				\
 									\
-	    /* Need more pages? */					\
-	    if(unlikely(mp->first_page_with_free_spot == mp->allocated_pages)) \
-		_MP_MorePages_##Type();					\
-									\
-	    assert(mp->first_page_with_free_spot < mp->allocated_pages); \
-									\
-	    /* Need more allocation? */					\
-	    if(likely(mp->pages[mp->first_page_with_free_spot].memblock == NULL)) \
+	    if(_MP_IndexMasterPage(mp->first_page_with_free_spot))	\
 	    {								\
-		_MP_Page_##Type *mpp = &(mp->pages[mp->first_page_with_free_spot]); \
-		_MP_InitPage_##Type(mpp);				\
-		return;							\
+		/* Need more pages? */					\
+		if(unlikely(mp->first_page_with_free_spot == mp->allocated_pages)) \
+		{							\
+		    _MP_MorePages_##Type();				\
+		    _MP_InitPages_##Type(mp->first_page_with_free_spot); \
+		    return;						\
+		}							\
+									\
+		assert(mp->first_page_with_free_spot < mp->allocated_pages); \
+									\
+		/* Need more allocation? */				\
+		if(mp->pages[mp->first_page_with_free_spot].memblock == NULL) \
+		{							\
+		    _MP_InitPages_##Type(mp->first_page_with_free_spot); \
+		    return;						\
+		}							\
 	    }								\
+									\
+	    assert(mp->pages[mp->first_page_with_free_spot].memblock != NULL); \
 									\
 	    /* Simply the next one that has stuff available? */		\
 	    if(mp->pages[mp->first_page_with_free_spot].available_mask != 0) \
@@ -151,14 +189,24 @@
 									\
 	memset(obj, 0, sizeof(Type));					\
 									\
-	if(unlikely( ~(mpp->available_mask) == 0) )			\
+	if(unlikely(_MP_IndexMasterPage(page_index) && ~(mpp->available_mask) == 0) ) \
 	{								\
-	    size_t col_idx = mp->candidate_page_for_deallocation;	\
+	    bool okay = true;						\
+	    size_t i;							\
+	    for(i = 1; i < _MP_IndexMasterPage_Size(page_index); ++i)	\
+	    {								\
+		if(~((mpp + i)->available_mask) != 0)			\
+		{okay = false; break; }					\
+	    }								\
+	    if(okay)							\
+	    {								\
+		size_t col_idx = mp->candidate_page_for_deallocation;	\
 									\
-	    if(col_idx != page_index && (~(mp->pages[col_idx].available_mask)) == 0) \
-		_MP_ClearPage_##Type(&(mp->pages[col_idx]));		\
+		if(col_idx != page_index && (~(mp->pages[col_idx].available_mask)) == 0) \
+		    _MP_ClearPages_##Type(col_idx);			\
 									\
-	    mp->candidate_page_for_deallocation = page_index;		\
+		mp->candidate_page_for_deallocation = page_index;	\
+	    }								\
 	}								\
     }
 

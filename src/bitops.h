@@ -11,7 +11,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <math.h>
-#include "brg_endian.h"
 #include "optimizations.h"
 #include "debugging.h"
 
@@ -24,6 +23,8 @@ typedef unsigned long int bitfield;
 
 #define _BITMASK(n)  ( (((bitfield)1) << (n)) - 1)
     
+#define isPowerOf2(x) ( ! ((x) & ((x) - 1) ) ) 
+
 static inline bool bitOn(bitfield bf, unsigned int bit)
 {
     return !!(bf & LeftShift(1, bit));
