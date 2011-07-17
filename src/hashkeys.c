@@ -330,7 +330,7 @@ static inline HashKey CityHash128WithSeed(const char *s, size_t len, uint64_t se
   return hk;
 }
 
-HashKey CityHash128(const char *s, size_t len) {
+static HashKey CityHash128(const char *s, size_t len) {
   if (len >= 16) {
     return CityHash128WithSeed(s + 16,
                                len - 16,
@@ -434,7 +434,7 @@ static inline void _Hf_FromUInt(hk_ptr dest_key, unsigned long x, unsigned long 
 
 static HashKey* _hk_uint_lookup = NULL;
 
-void _Hk_PopulateHKIntLookup()
+static void _Hk_PopulateHKIntLookup()
 {
     assert(_hk_uint_lookup == NULL);
     _hk_uint_lookup = malloc(HK_UNSIGNED_INT_LOOKUP_SIZE*sizeof(HashKey));

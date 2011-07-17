@@ -43,10 +43,8 @@
 
 
 // function declarations
-bool verifyKeyAndAdvanceStream(char* name, FILE* fp);
-bool getKeyFromFileStream(HashKey* key, char* name, FILE* fp);
-void createIBDGraphs(char* file, IBDGraphList *ibd_graphs);
-int checkEdgeList(int edge, int NUM_EDGES, int edge_list[]);
+static void createIBDGraphs(char* file, IBDGraphList *ibd_graphs);
+/* static int checkEdgeList(int edge, int NUM_EDGES, int edge_list[]); */
 
 
 int main(int argc, char **argv)
@@ -219,8 +217,133 @@ int main(int argc, char **argv)
 // step through until node is contained in "active" graph, then start
 // a new graph
 
+static inline bool verifyKeyAndAdvanceStream(char* name, FILE* fp)
+{
+    int pos, r;
 
-void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
+    do{
+	r = fgetc(fp);
+	
+	if(unlikely(r == EOF))
+	    return false;
+
+    }while(isspace(r));
+
+    if(r != name[0])
+	return false;
+
+    for(pos = 1; pos < EDGE_NAME_BUFFER_SIZE; ++pos) 
+    {
+
+	r = fgetc(fp);
+
+	if(unlikely(r == EOF))
+	    return false;
+	      
+	if(isspace(r))
+	    return true;
+
+	if(r != name[pos])
+	    return false;
+	
+    }
+
+    do{
+	r = fgetc(fp);
+
+	if(unlikely(r == EOF))
+	    return false;
+
+    }while(!isspace(r));
+
+    return true;
+}
+
+static inline bool getKeyFromFileStream(HashKey* key, char* name, FILE* fp)
+{
+    // This version will handle anything!
+    Hk_CLEAR(key);
+
+    char buffer[EDGE_NAME_BUFFER_SIZE];
+    bool starting = true, first = true;
+
+    // First get rid of blank characters
+    while(true)
+    {
+	bool done = false, is_int = true;
+	int pos;
+
+	for(pos = 0; pos < EDGE_NAME_BUFFER_SIZE; ++pos)
+	{
+	    int r;
+
+	    do{
+		r = fgetc(fp);
+
+		if(unlikely(r == EOF))
+		    return false;
+
+	    }while(unlikely(starting && isspace(r)));
+
+	    if(isspace(r))
+	    {
+		buffer[pos] = '\0';
+		done = true;
+		if(first && name != NULL)
+		    name[pos] = '\0';
+		break;
+	    }
+	    else
+	    {
+		buffer[pos] = (char)r;
+		starting = false;
+		if(first && name != NULL)
+		    name[pos] = buffer[pos];
+
+		is_int &= !!isdigit(r);
+	    }
+	}
+
+	// Catch case of exactly a 64 character string; this is next;
+	if(unlikely(pos == 0))
+	    return true;
+
+	if(likely(Hk_ISZERO(key)))
+	{
+
+
+	    if(likely(done))
+	    {
+		// See if we can use the cheaper integer hash function
+		if(is_int)
+		{
+		    long n = atol(buffer);
+
+		    if(likely(n != 0))
+		    {
+			*key = Hk_FromInt(n);
+			return true;
+		    }
+		}
+
+		*key = Hk_FromCharBuffer(buffer, pos);
+		return true;
+
+	    } else {
+		assert(pos == EDGE_NAME_BUFFER_SIZE);
+		*key = Hk_FromCharBuffer(buffer, EDGE_NAME_BUFFER_SIZE);
+	    }
+	} else {
+	    HashKey new_key = Hk_FromCharBuffer(buffer, pos);
+	    Hk_InplaceCombine(key, &new_key);
+
+	    if(done)
+		return true;
+	}
+    }
+}
+
+static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 {
 
     int i, j, k;
@@ -384,145 +507,20 @@ void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
     return;
 }
 
-bool verifyKeyAndAdvanceStream(char* name, FILE* fp)
-{
-    int pos, r;
 
-    do{
-	r = fgetc(fp);
-	
-	if(unlikely(r == EOF))
-	    return false;
-
-    }while(isspace(r));
-
-    if(r != name[0])
-	return false;
-
-    for(pos = 1; pos < EDGE_NAME_BUFFER_SIZE; ++pos) 
-    {
-
-	r = fgetc(fp);
-
-	if(unlikely(r == EOF))
-	    return false;
-	      
-	if(isspace(r))
-	    return true;
-
-	if(r != name[pos])
-	    return false;
-	
-    }
-
-    do{
-	r = fgetc(fp);
-
-	if(unlikely(r == EOF))
-	    return false;
-
-    }while(!isspace(r));
-
-    return true;
-}
-
-bool getKeyFromFileStream(HashKey* key, char* name, FILE* fp)
-{
-    // This version will handle anything!
-    Hk_CLEAR(key);
-
-    char buffer[EDGE_NAME_BUFFER_SIZE];
-    bool starting = true, first = true;
-
-    // First get rid of blank characters
-    while(true)
-    {
-	bool done = false, is_int = true;
-	int pos;
-
-	for(pos = 0; pos < EDGE_NAME_BUFFER_SIZE; ++pos)
-	{
-	    int r;
-
-	    do{
-		r = fgetc(fp);
-
-		if(unlikely(r == EOF))
-		    return false;
-
-	    }while(unlikely(starting && isspace(r)));
-
-	    if(isspace(r))
-	    {
-		buffer[pos] = '\0';
-		done = true;
-		if(first && name != NULL)
-		    name[pos] = '\0';
-		break;
-	    }
-	    else
-	    {
-		buffer[pos] = (char)r;
-		starting = false;
-		if(first && name != NULL)
-		    name[pos] = buffer[pos];
-
-		is_int &= !!isdigit(r);
-	    }
-	}
-
-	// Catch case of exactly a 64 character string; this is next;
-	if(unlikely(pos == 0))
-	    return true;
-
-	if(likely(Hk_ISZERO(key)))
-	{
-
-
-	    if(likely(done))
-	    {
-		// See if we can use the cheaper integer hash function
-		if(is_int)
-		{
-		    long n = atol(buffer);
-
-		    if(likely(n != 0))
-		    {
-			*key = Hk_FromInt(n);
-			return true;
-		    }
-		}
-
-		*key = Hk_FromCharBuffer(buffer, pos);
-		return true;
-
-	    } else {
-		assert(pos == EDGE_NAME_BUFFER_SIZE);
-		*key = Hk_FromCharBuffer(buffer, EDGE_NAME_BUFFER_SIZE);
-	    }
-	} else {
-	    HashKey new_key = Hk_FromCharBuffer(buffer, pos);
-	    Hk_InplaceCombine(key, &new_key);
-
-	    if(done)
-		return true;
-	}
-    }
-}
-
-// compares edge to the list of edges initially generated
-int checkEdgeList(int edge, int NUM_EDGES, int edge_list[])
-{
-    int i = 0, j;
-    for(j = 0; j < NUM_EDGES; j++)
-    {
-	if(edge_list[j] == edge)
-	{
-	    i = 1;
-	    return i;
-	}
-    }
-    return i;
-}
+/* // compares edge to the list of edges initially generated */
+/* static int checkEdgeList(int edge, int NUM_EDGES, int edge_list[]) */
+/* { */
+/*     int i = 0, j; */
+/*     for(j = 0; j < NUM_EDGES; j++) */
+/*     { */
+/* 	if(edge_list[j] == edge) */
+/* 	{ */
+/* 	    i = 1; */
+/* 	    return i; */
+/* 	} */
+/*     } */
+/*     return i; */
+/* } */
 
 

@@ -210,7 +210,7 @@ static inline void _Ht_Table_AppendUnique(_ht_node_rptr node, const _HT_Item hi)
 }
 
 
-_HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
+static _HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
     _ht_node_rptr node, const _HT_Item hi, const bool overwrite);
 
 
@@ -322,7 +322,7 @@ static inline _HT_Table_Insert_Return _Ht_Table_InsertIntoNode(
     return ret;
 }
 
-_HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
+static _HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
     _ht_node_rptr node, const _HT_Item hi, const bool overwrite)
 {
     if(node->next_chain == NULL)
@@ -331,7 +331,7 @@ _HT_Table_Insert_Return _Ht_Table_InsertIntoOverflowNode(
     return _Ht_Table_InsertIntoNode(&(node->next_chain->node), hi, overwrite);
 }
 
-void _Ht_Table_Grow(HashTable *ht);
+static void _Ht_Table_Grow(HashTable *ht);
 
 static inline void _Ht_Table_GrowIfNeeded(HashTable *ht)
 {
@@ -349,7 +349,7 @@ static inline _HT_Table_Insert_Return _Ht_Table_Insert(HashTable *ht, HashObject
     return _Ht_Table_InsertIntoNode(&(ht->table[idx]), hi, overwrite);
 }
 
-void _Ht_Table_Grow(HashTable *ht)
+static void _Ht_Table_Grow(HashTable *ht)
 {
     _HT_Node* _restrict_ src_table = ht->table;
     const size_t src_size = ht->_table_size;
@@ -397,7 +397,7 @@ void _Ht_Table_Grow(HashTable *ht)
 }
 
 
-void _Ht_Table_DeallocateChain(_HT_Independent_Node * _restrict_ inode)
+static void _Ht_Table_DeallocateChain(_HT_Independent_Node * _restrict_ inode)
 {
     assert(inode != NULL);
 
@@ -487,7 +487,7 @@ HT_TABLE_FIND_RESTART:;
     }
 }
 
-void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node);
+static void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node);
 
 /* Returns true if the node is now empty, otherwise false. */
 static inline bool _Ht_Table_ClearFromNode(_ht_node_rptr node, unsigned int idx)
@@ -515,7 +515,7 @@ static inline bool _Ht_Table_ClearFromNode(_ht_node_rptr node, unsigned int idx)
     }
 }
 
-void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node)
+static void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node)
 {
     assert(node->size == _HT_ITEMS_PER_NODE);
     assert(node->next_chain != NULL);
@@ -828,12 +828,12 @@ static inline void __Ht_MSL_BackupNodeStack(
     }
 }
 
-void __Ht_MSL_InsertValue(HashTable *ht, _HT_MSL_NodeStack **ns_ptr, 
-			  unsigned int *cur_level_ptr,
-			  const HashKey *insert_hk, 
-			  const HashKey *remove_hk, 
-			  const markertype loc, 
-			  const unsigned int new_height)
+static void __Ht_MSL_InsertValue(HashTable *ht, _HT_MSL_NodeStack **ns_ptr, 
+				 unsigned int *cur_level_ptr,
+				 const HashKey *insert_hk, 
+				 const HashKey *remove_hk, 
+				 const markertype loc, 
+				 const unsigned int new_height)
 {
     /* Function does what it says; the only unexpected thing is that
      * the resulting node stack always points to the element
@@ -1066,8 +1066,8 @@ void __Ht_MSL_InsertValue(HashTable *ht, _HT_MSL_NodeStack **ns_ptr,
 }
 
 /* The main interface functions. */
-void _Ht_MSL_Write(HashTable *ht, const HashKey *hk, const MarkerInfo *mi,
-		   bool switch_add_sub_flags)
+static void _Ht_MSL_Write(HashTable *ht, const HashKey *hk, const MarkerInfo *mi,
+			  bool switch_add_sub_flags)
 {
     /* Plan: 
      *
@@ -1276,8 +1276,9 @@ void _Ht_MSL_Write(HashTable *ht, const HashKey *hk, const MarkerInfo *mi,
  * building up hash tables from sequential markers.  A simplified
  * version of the _Ht_MSL_Write(...) function. */
 
-void _Ht_MSL_WritePair(HashTable *ht, const HashKey *hk, markertype add_loc, markertype sub_loc,
-		       bool switch_add_sub_flags)
+static void _Ht_MSL_WritePair(
+    HashTable *ht, const HashKey *hk, markertype add_loc, markertype sub_loc,
+    bool switch_add_sub_flags)
 {
     /* should be checked at previous level */
     assert(ht->marker_sl != NULL);
@@ -1503,7 +1504,7 @@ void _Ht_MSL_Drop(HashTable *ht)
  *************************************************************/
 
 /* Retrieve the hash at a certain marker point. */
-void _Ht_MSL_HashAtMarkerPoint(HashKey *hk_dest, HashTable *ht, markertype loc)
+static void _Ht_MSL_HashAtMarkerPoint(HashKey *hk_dest, HashTable *ht, markertype loc)
 {
     Hk_CLEAR(hk_dest);
 
@@ -1537,10 +1538,10 @@ void _Ht_MSL_HashAtMarkerPoint(HashKey *hk_dest, HashTable *ht, markertype loc)
     }
 }
 
-HashValidityItem _Htmi_NewForRangeHashing(HashTable *ht, HashTableMarkerIterator* htmi, 
+static HashValidityItem _Htmi_NewForRangeHashing(HashTable *ht, HashTableMarkerIterator* htmi, 
 					  markertype m);
 
-void _Ht_MSL_HashOfMarkerRange(HashKey *hk_dest, HashTable *ht, markertype start, markertype end)
+static void _Ht_MSL_HashOfMarkerRange(HashKey *hk_dest, HashTable *ht, markertype start, markertype end)
 {
     Hk_CLEAR(hk_dest);
 
@@ -2602,8 +2603,8 @@ HashTableMarkerIterator* Htmi_New(HashTable *ht)
     return htmi;
 }
 
-HashValidityItem _Htmi_NewForRangeHashing(HashTable *ht, HashTableMarkerIterator* htmi, 
-					  markertype m)
+static HashValidityItem _Htmi_NewForRangeHashing(HashTable *ht, HashTableMarkerIterator* htmi, 
+						 markertype m)
 {
     htmi->ht = ht;
 
@@ -2937,7 +2938,7 @@ static inline HashSequence* _restrict_ _Hs_Update(
 
 /* Now the utilizing functions. */
 
-void _Hs_IntersectionFunction(hk_ptr hk_dest, chk_ptr hk1, chk_ptr hk2)
+static void _Hs_IntersectionFunction(hk_ptr hk_dest, chk_ptr hk1, chk_ptr hk2)
 {
     if(Hk_EQUAL(hk1, hk2))
 	Hk_COPY(hk_dest, hk1);
@@ -3013,7 +3014,7 @@ HashTable* Hs_ToHashTable(HashSequence *hs)
  *   summarizing stuff above.
  *
  ********************************************************************************/
-void _Hs_SummarizeFunction(hk_ptr hk_dest, chk_ptr hs_hk, chk_ptr ht_hk)
+static void _Hs_SummarizeFunction(hk_ptr hk_dest, chk_ptr hs_hk, chk_ptr ht_hk)
 {
     HashKey hk;
     Hk_REHASH(&hk, ht_hk);
