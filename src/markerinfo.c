@@ -13,8 +13,6 @@
 #include <memory.h>
 #include <stdio.h>
 
-MemoryPool marker_info_pool = STATIC_MEMORY_POOL_VALUES(sizeof(MarkerInfo));
-
 static bool marker_range_warnings_enabled = true;
 
 void Mi_DisableWarnings()
@@ -48,8 +46,7 @@ DEFINE_OBJECT(
     MarkerInfo,
     Object,
     NULL,
-    Mi_Destroy,					
-    NULL);
+    Mi_Destroy);
 
 
 /* Clear all the information out of the marker info class. */
@@ -144,7 +141,7 @@ static inline size_t _Mi_Bisect(cmi_ptr mi, markertype s)
     }
 }
 
-static inline void _Mi_Insert(mi_ptr mi, size_t idx, markertype start, markertype end)
+static void _Mi_Insert(mi_ptr mi, size_t idx, markertype start, markertype end)
 {
     assert(idx <= mi->num_array_ranges);
 
@@ -175,7 +172,7 @@ static inline void _Mi_Insert(mi_ptr mi, size_t idx, markertype start, markertyp
     Mi_CheckRestructure(mi);
 }
 
-static inline void _Mi_InsertAtEnd(mi_ptr mi, markertype start, markertype end)
+static void _Mi_InsertAtEnd(mi_ptr mi, markertype start, markertype end)
 {
     /* Allocate the space. */
     size_t idx = mi->num_array_ranges;
@@ -320,13 +317,17 @@ void Mi_AddValidRange(mi_ptr mi, markertype start, markertype end)
 	    else
 	    {
 		ASSERTF(start > mi->range_list[0].start, Mi_debug_printMi(mi));
-		_Mi_Insert(mi, 1, start, end);
+		_Mi_InsertAtEnd(mi, start, end);
 	    }
 
 	    return;
 	}
     }    
-    else
+    else if(mi->range_list[mi->num_array_ranges - 1].end <= end) 
+    {
+	_Mi_InsertAtEnd(mi, start, end);
+    }
+    else 
     {
 	/* Now have to insert the new range; possibly extending or
 	 * connecting ranges. */
@@ -430,7 +431,7 @@ void Mi_RemoveValidRange(mi_ptr mi, markertype start, markertype end)
     if(unlikely(start >= end))
 	return;
 
-    mi_ptr m = Mi_New(MARKER_MINUS_INFTY, start);
+    mi_ptr m = Mi_NEW(MARKER_MINUS_INFTY, start);
     Mi_AppendValidRange(m, end, MARKER_PLUS_INFTY);
 
     mi_ptr m2 = Mi_Intersection(mi, m);
@@ -474,9 +475,9 @@ bool Mi_IsEmpty(cmi_ptr mi)
 mi_ptr Mi_Complement(cmi_ptr mi)
 {
     if(unlikely(mi == NULL))
-	return Mi_New(0,0);
+	return Mi_NEW(0,0);
 
-    mi_ptr ret_mi = Mi_New(0,0);
+    mi_ptr ret_mi = Mi_NEW(0,0);
 
     MarkerIterator *mii = Mii_New(mi);
     MarkerRange mr;
@@ -539,9 +540,9 @@ bool Mi_Equal(const MarkerInfo *mi1, const MarkerInfo* mi2)
 mi_ptr Mi_Copy(cmi_ptr mi)
 {
     if(unlikely(mi == NULL))
-	return Mi_New(MARKER_MINUS_INFTY, MARKER_PLUS_INFTY);
+	return Mi_NEW(MARKER_MINUS_INFTY, MARKER_PLUS_INFTY);
 
-    mi_ptr mic = Mi_New(0,0);
+    mi_ptr mic = Mi_NEW(0,0);
 
     mic->r = mi->r;
     
@@ -582,7 +583,7 @@ mi_ptr Mi_Union(cmi_ptr mi1, cmi_ptr mi2)
 	return Mi_Copy(mi1);
     }
 
-    mi_ptr mi = Mi_New(0,0);
+    mi_ptr mi = Mi_NEW(0,0);
 
     while(true)
     {
@@ -670,7 +671,7 @@ mi_ptr Mi_Intersection(cmi_ptr mi1, cmi_ptr mi2)
     else if(unlikely(mi2 == NULL))
 	return Mi_Copy(mi1);
 
-    mi_ptr mi = Mi_New(0,0);
+    mi_ptr mi = Mi_NEW(0,0);
 
     MarkerIterator *mii1 = Mii_New(mi1);
     MarkerIterator *mii2 = Mii_New(mi2);
@@ -714,7 +715,7 @@ mi_ptr Mi_Difference(cmi_ptr mi1, cmi_ptr mi2)
     if(unlikely(mi1 == NULL))
 	return Mi_Complement(mi2);
     else if(unlikely(mi2 == NULL))
-	return Mi_New(0,0);
+	return Mi_NEW(0,0);
 
     mi_ptr mi2c = Mi_Complement(mi2);
     mi_ptr ret_mi = Mi_Intersection(mi1, mi2c);

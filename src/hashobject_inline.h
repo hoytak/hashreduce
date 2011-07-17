@@ -138,7 +138,7 @@ static inline void H_ADD_MARKER_VALID_RANGE(obj_ptr x, markertype r_start, marke
     assert(!H_MarkerIsLocked(h));
 
     if(unlikely(h->mi == NULL))
-	h->mi = Mi_New(r_start, r_end);
+	h->mi = Mi_NEW(r_start, r_end);
     else
 	Mi_AddValidRange(h->mi, r_start, r_end);
 }

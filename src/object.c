@@ -3,7 +3,7 @@
 /* A null structure that Object is the base type of. */
 ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 
-DEFINE_OBJECT(Object, NULLType, NULL, NULL, NULL);
+DEFINE_OBJECT(Object, NULLType, NULL, NULL);
 
 /* Mostly just wrapping the macros defined previously. */
 void O_IncRef(void *obj) 

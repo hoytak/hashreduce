@@ -19,9 +19,7 @@ DEFINE_OBJECT(
     /* Name. */            HashObject,
     /* BaseType */         Object,
     /* construction */     NULL,   /* Zeroed out is fine here. */
-    /* delete */           HashObjectDelete,   
-    /* Duplicate */        NULL
-    );
+    /* delete */           HashObjectDelete);
 
 HashObject* NewHashObject()
 {

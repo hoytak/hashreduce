@@ -106,7 +106,7 @@ static inline bool _Hti_NEXT(HashObject** h_dest, _HashTableInternalIterator *ht
 	{
 	    if(unlikely(hti->next_node->next_chain != NULL))
 	    {
-		assert(hti->next_index == 4);
+		assert(hti->next_index == _HT_ITEMS_PER_NODE);
 		hti->next_node = &(hti->next_node->next_chain->node);
 		assert(hti->next_node->size >= 1);
 		hti->next_index = 0;

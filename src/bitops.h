@@ -9,6 +9,8 @@
 #define BITOPS_H
 
 #include <stdint.h>
+#include <stdio.h>
+#include <math.h>
 #include "brg_endian.h"
 #include "optimizations.h"
 #include "debugging.h"
@@ -97,6 +99,16 @@ static inline int getFirstBitOn(bitfield bf)
 static inline int getFirstBitOff(bitfield bf)
 {
     return getFirstBitOn(~bf);
+}
+
+static inline int bitwise_log2(unsigned long bf)
+{
+
+#ifdef HAVE__builtin_clzl
+    return bitsizeof(unsigned long) - __builtin_clzl(bf);
+#else
+    return (size_t)(floor(log2(bf)));
+#endif
 }
 
 #endif 

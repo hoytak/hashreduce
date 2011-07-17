@@ -97,14 +97,11 @@ typedef struct ObjectInfo {
     /* If not NULL, called before the object is garbage collected. */
     nullunaryobjectfunc delete_function;
 
-    /* Called to turn arg 1 into a duplicate of the object in arg2. */
-    nullbinaryobjectfunc duplicate_function;
-   
+    nullunaryobjectfunc deallocate_function;
+
     /*****************************************
      * Memory management operations. 
      *****************************************/
-
-    MemoryPool object_pool;
 
 } ObjectInfo;
 
@@ -148,10 +145,12 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 #define DECLARE_OBJECT(ObjectType)					\
     									\
     extern struct ObjectInfo O_GlobalObjectInfoStruct(ObjectType);	\
+									\
+    DECLARE_GLOBAL_MEMORY_POOL(ObjectType);				\
     									\
     static inline ObjectType* ALLOCATE##ObjectType()			\
     {									\
-	ObjectType *obj = (ObjectType*)MP_ItemMalloc(&O_GlobalObjectInfoStruct(ObjectType).object_pool); \
+	ObjectType *obj = Mp_New##ObjectType();				\
 									\
 	_SET_OBJECT_MAGIC_NUMBER(obj);					\
 	obj->_obj_type_info = &O_GlobalObjectInfoStruct(ObjectType);	\
@@ -195,8 +194,7 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 #define DEFINE_OBJECT(ObjectType,					\
 		      BaseType,						\
 		      construction_function,				\
-		      delete_function,					\
-		      duplicate_function)				\
+		      delete_function)					\
 									\
     /* Functions that explicitly do the casts for what is stored in	\
      * the construction function to stay within the standard.		\
@@ -206,16 +204,15 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 									\
     extern ObjectInfo O_GlobalObjectInfoStruct(BaseType);		\
     									\
+    DEFINE_GLOBAL_MEMORY_POOL(ObjectType);				\
+									\
     /* Initializing the object info structure. */			\
     ObjectInfo O_GlobalObjectInfoStruct(ObjectType) = {			\
 	/*  *type_name  */    #ObjectType,				\
 	/* Base Type */	      &O_GlobalObjectInfoStruct(BaseType),	\
-	/* constructor */     (nullunaryobjectfunc)construction_function,	\
-        /* destructor */      (nullunaryobjectfunc)delete_function,		\
-	/* duplicate */       (nullbinaryobjectfunc)duplicate_function,       \
-									\
-	/* Memory management operations. */				\
-	STATIC_MEMORY_POOL_VALUES(sizeof(ObjectType))			\
+	/* constructor */     (nullunaryobjectfunc)construction_function, \
+        /* destructor */      (nullunaryobjectfunc)delete_function,	\
+	/* memory_pool */     (nullunaryobjectfunc)Mp_Free##ObjectType##_NonStatic \
     };									\
 									\
     /* Functions for reporting casting errors. */			\
@@ -292,44 +289,6 @@ void O_DestroyValueObject(void *obj);
 
 /*  True if a given object is value-based. */
 bool O_ObjectIsValue(void *obj);
-
-
-/*****************************************
- *
- *  Macros implementing the above.
- *
- ****************************************/
-
-#define O_INCREF(obj)							\
-    do {								\
-	assert(O_IsType(Object, obj));					\
-									\
-	Object *objp = (Object*)(obj);					\
-									\
-	if(likely(objp->_obj_ref_count >= 0))				\
-	    ++objp->_obj_ref_count;					\
-    } while(0)
-
-#define O_DECREF(obj)							\
-    do{									\
-	assert(O_IsType(Object, obj));					\
-									\
-	Object *objp = (Object*)(obj);					\
-									\
-	assert(objp->_obj_ref_count > 0);				\
-									\
-	--objp->_obj_ref_count;						\
-									\
-	if(objp->_obj_ref_count == 0)					\
-	{								\
-	    if(objp->_obj_type_info->delete_function != NULL)		\
-		(*objp->_obj_type_info->delete_function)(objp);		\
-									\
-	    MP_ItemFree(&(objp->_obj_type_info->object_pool), objp);	\
-	}								\
-    }while(0)
-
-#define O_REF_COUNT(obj) ((obj)->_obj_ref_count)
 
 /*************************************************************
  *
@@ -426,9 +385,40 @@ DECLARE_OBJECT(Object);
  *
  **********************************************************************/
 
-// TODO:
-// Object* copy(Object*)
+/*****************************************
+ *
+ *  Macros implementing the above.
+ *
+ ****************************************/
 
+#define O_INCREF(obj)							\
+    do {								\
+	assert(O_IsType(Object, obj));					\
+									\
+	Object *objp = (Object*)(obj);					\
+									\
+	if(likely(objp->_obj_ref_count >= 0))				\
+	    ++objp->_obj_ref_count;					\
+    } while(0)
+
+#define O_DECREF(obj)							\
+    do{									\
+	Object *objp = (Object*)(obj);					\
+	assert(O_IsType(Object, objp));					\
+	assert(objp->_obj_ref_count > 0);				\
+    									\
+	--objp->_obj_ref_count;						\
+    									\
+	if(objp->_obj_ref_count == 0)					\
+	{								\
+	    if(objp->_obj_type_info->delete_function != NULL)		\
+		(*(objp->_obj_type_info->delete_function))(objp);	\
+									\
+	    (*(objp->_obj_type_info->deallocate_function))(objp);	\
+	}								\
+    }while(0)
+
+#define O_REF_COUNT(obj) ((obj)->_obj_ref_count)
 
 #endif
 

@@ -48,7 +48,6 @@ DECLARE_OBJECT(MarkerInfo);
 typedef MarkerInfo* mi_ptr;
 typedef const MarkerInfo* cmi_ptr;
 
-
 /*****************************************
  *
  *  Operations on the marker. 

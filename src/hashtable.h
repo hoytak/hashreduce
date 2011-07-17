@@ -40,8 +40,8 @@
  *  Resizing is triggered 
  ********************************************************************************/
 
-#define _HT_ITEMS_PER_NODE 4
-#define _HT_INITIAL_LOG2_SIZE 2
+#define _HT_ITEMS_PER_NODE 2
+#define _HT_INITIAL_LOG2_SIZE 1
 
 typedef struct {
     uint64_t hk64;
@@ -52,9 +52,9 @@ struct _HT_Independent_Node_type;
 
 /* Keep this in size to a byte aligned boundary. */
 typedef struct _HT_Node_type {
-    size_t size;
-    struct _HT_Independent_Node_type *next_chain;
-    _HT_Item items[_HT_ITEMS_PER_NODE];
+  size_t size;
+  struct _HT_Independent_Node_type *next_chain;
+  _HT_Item items[_HT_ITEMS_PER_NODE];
 } _HT_Node;
 
 typedef _HT_Node * _restrict_  _ht_node_rptr;

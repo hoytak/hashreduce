@@ -15,6 +15,7 @@
 #include "randfunctions.h"
 #include "utilities.h"
 #include "types.h"
+#include "bitops.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -75,7 +76,7 @@ void _Ht_HashTable_Constructor(HashTable *ht)
 /* A specific constructor for custom constructions.*/
 HashTable* NewSizeOptimizedHashTable(size_t expected_size)
 {
-    size_t log2_size = (size_t)(floor(log2(expected_size)));
+    size_t log2_size = bitwise_log2(expected_size);
 
     HashTable *ht = ALLOCATEHashTable();
 
@@ -126,15 +127,13 @@ void _Ht_Destroy(HashTable *ht)
 	    _Ht_Table_DeallocateChain(ht->table[i].next_chain);
 
     free(ht->table);
-
 }
 
 DEFINE_OBJECT(
     /* Name. */     HashTable,
     /* BaseType */  Object,
     /* construct */ _Ht_HashTable_Constructor,
-    /* delete */    _Ht_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _Ht_Destroy);
 
 /************************************************************
  * Functions for managing internal aspects of the hash table,
@@ -175,9 +174,9 @@ static inline void _Ht_Table_AppendUnique(_ht_node_rptr node, const _HT_Item hi)
     /* printf("\nInserting >>> "); */
     /* H_debug_print(hi.obj); */
 
-    while(unlikely(node->size == 4))
+    while(unlikely(node->size == _HT_ITEMS_PER_NODE))
     {
-	assert(node->items[3].hk64 <= hi.hk64);
+	assert(node->items[_HT_ITEMS_PER_NODE-1].hk64 <= hi.hk64);
 
 	if(node->next_chain == NULL)
 	{
@@ -190,21 +189,21 @@ static inline void _Ht_Table_AppendUnique(_ht_node_rptr node, const _HT_Item hi)
 	node = &(node->next_chain->node);
     }
 
-    assert(node->size < 4);
+    assert(node->size < _HT_ITEMS_PER_NODE);
 
+#ifndef NDEBUG
     if(node->size != 0)
     {
-#ifndef NDEBUG
 	if(Hk_GEQ(H_Hash_RO(node->items[node->size - 1].obj), H_Hash_RO(hi.obj)))
 	    fprintf(stderr, "Error in item ordering; object \n%llx >= \n%llux\n", 
 		    (long long unsigned int)
 		    (H_Hash_RO(node->items[node->size - 1].obj)->hk64[HK64I(0)]), 
 		    (long long unsigned int)
 		    (H_Hash_RO(hi.obj)->hk64[HK64I(0)]));
-#endif
-
 	assert(Hk_LT(H_Hash_RO(node->items[node->size - 1].obj), H_Hash_RO(hi.obj)));
     }
+#endif
+
 
     node->items[node->size] = hi;
     ++(node->size);
@@ -236,33 +235,11 @@ static inline _HT_Table_Insert_Return _Ht_Table_InsertIntoNode(
 
     unsigned int insert_pos = 0;
 
-    switch(node->size)
-    {
-    case 4:
-	if(unlikely(node->items[3].hk64 < hi.hk64))
-	{
-	    return _Ht_Table_InsertIntoOverflowNode(node, hi, overwrite);
-	}
-    case 3:
-	if(node->items[2].hk64 < hi.hk64)
-	{
-	    insert_pos = 3;
-	    break;
-	}
-    case 2:
-	if(node->items[1].hk64 < hi.hk64)
-	{
-	    insert_pos = 2;
-	    break;
-	}
-    case 1:
-	if(node->items[0].hk64 < hi.hk64)
-	{
-	    insert_pos = 1;
-	    break;
-	}
-    default:;
-    }
+    while(insert_pos < node->size && node->items[insert_pos].hk64 < hi.hk64)
+    	++insert_pos;
+
+    if(insert_pos == _HT_ITEMS_PER_NODE)
+    	return _Ht_Table_InsertIntoOverflowNode(node, hi, overwrite);
 
     /* Now see if it's replacing one or the 64bit hash version conflicts. */
     if(unlikely(hi.hk64 == node->items[insert_pos].hk64))
@@ -321,7 +298,7 @@ static inline _HT_Table_Insert_Return _Ht_Table_InsertIntoNode(
     }
 
     if(unlikely(node->size == _HT_ITEMS_PER_NODE))
-	_Ht_Table_InsertIntoOverflowNode(node, node->items[3], overwrite);
+	_Ht_Table_InsertIntoOverflowNode(node, node->items[_HT_ITEMS_PER_NODE-1], overwrite);
     else
 	++node->size;
 
@@ -450,51 +427,25 @@ static inline bool _Ht_Table_Find(
 
 HT_TABLE_FIND_RESTART:;
 
-    unsigned int pos = 4;
+    unsigned int pos = 0;
 
-    switch(node->size)
+    while(pos < _HT_ITEMS_PER_NODE && node->items[pos].hk64 < hk64)
+    	++pos;
+
+    if(pos == _HT_ITEMS_PER_NODE)
     {
-    case 4:
-	if(unlikely(node->items[3].hk64 < hk64))
+	if(node->next_chain != NULL)
 	{
-	    if(node->next_chain != NULL)
-	    {
-		*base_node = node;
-		node = &(node->next_chain->node);
-		goto HT_TABLE_FIND_RESTART;
-	    }
-	    else
-		return false;
+	    *base_node = node;
+	    node = &(node->next_chain->node);
+	    goto HT_TABLE_FIND_RESTART;
 	}
-	if(node->items[3].hk64 == hk64)
-	{
-	    pos = 3;
-	    break;
-	}
-    case 3:
-	if(node->items[2].hk64 == hk64)
-	{
-	    pos = 2;
-	    break;
-	}
-    case 2:
-	if(node->items[1].hk64 == hk64)
-	{
-	    pos = 1;
-	    break;
-	}
-    case 1:
-	if(node->items[0].hk64 == hk64)
-	{
-	    pos = 0;
-	    break;
-	}
-    default:
-	/* None of the conditions have caught it; so it's not in this
-	 * table. */
-	   
-	return false;
+	else
+	    return false;
     }
+
+    if(node->items[pos].hk64 != hk64 || node->items[pos].obj == NULL)
+	return false;
 
     /* Now get to test if things are really equal. */
     if(likely(Hk_EQUAL(H_Hash_RO(node->items[pos].obj), &hk)))
@@ -507,20 +458,21 @@ HT_TABLE_FIND_RESTART:;
     else
     {
 	/* First make sure it's not in any of the other equal nodes. */
-	unsigned int s_pos = pos;
-
-	while(s_pos && node->items[--s_pos].hk64 == hk64)
+	while((++pos) < _HT_ITEMS_PER_NODE && node->items[pos].hk64 == hk64)
 	{
-	    if(likely(Hk_EQUAL(H_Hash_RO(node->items[s_pos].obj), &hk)))
+	    if(node->items[pos].obj == NULL)
+		return false;
+
+	    if(likely(Hk_EQUAL(H_Hash_RO(node->items[pos].obj), &hk)))
 	    {
 		*target_node = node;
-		*target_h = node->items[s_pos].obj;
-		*node_idx = s_pos;
+		*target_h = node->items[pos].obj;
+		*node_idx = pos;
 		return true;
 	    }
 	}
 
-	if(unlikely(pos == 3))
+	if(unlikely(pos == _HT_ITEMS_PER_NODE))
 	{
 	    /* It may be in the next level. */
 	    if(node->next_chain != NULL)
@@ -540,7 +492,7 @@ void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node);
 /* Returns true if the node is now empty, otherwise false. */
 static inline bool _Ht_Table_ClearFromNode(_ht_node_rptr node, unsigned int idx)
 {
-    assert(node->size <= 4);
+    assert(node->size <= _HT_ITEMS_PER_NODE);
     assert(node->size >= 1);
     assert(idx < node->size);
     
@@ -565,11 +517,11 @@ static inline bool _Ht_Table_ClearFromNode(_ht_node_rptr node, unsigned int idx)
 
 void _Ht_Table_SlideFromChainedNode(_ht_node_rptr node)
 {
-    assert(node->size == 4);
+    assert(node->size == _HT_ITEMS_PER_NODE);
     assert(node->next_chain != NULL);
     assert(node->next_chain->node.size >= 1);
 
-    node->items[3] = node->next_chain->node.items[0];
+    node->items[_HT_ITEMS_PER_NODE - 1] = node->next_chain->node.items[0];
 
     if(_Ht_Table_ClearFromNode(&(node->next_chain->node), 0))
     {
@@ -1512,8 +1464,7 @@ void _Ht_MSL_Drop(HashTable *ht)
 
 	/* Clear all the branches. */
 
-	for(;msl->start_node_level != 0; --msl->start_node_level) 
-	{
+	do {
 	    assert(msl->start_node != NULL);
 
 	    _HT_MSL_Node *br = (_HT_MSL_Node*)(msl->start_node);
@@ -1525,7 +1476,7 @@ void _Ht_MSL_Drop(HashTable *ht)
 	    }while(br != NULL);
 		    
 	    msl->start_node = (_HT_MSL_Branch*) msl->start_node->down;
-	}
+	} while(msl->start_node != NULL);
  
 	/* Now clear all the nodes. */
 
@@ -1903,7 +1854,7 @@ static inline HashObject* _Ht_InsertValidNonOverlappingRange(
 
     if(k == NULL)
     {
-	H_GIVE_MARKER_INFO(hk, Mi_New(r_start, r_end));
+	H_GIVE_MARKER_INFO(hk, Mi_NEW(r_start, r_end));
 	Ht_Set(ht, hk);
 	return hk;
     }
@@ -2774,8 +2725,7 @@ DEFINE_OBJECT(
     /* Name. */     HashSequence,
     /* BaseType */  Object,
     /* construct */ _Hs_Constructor,
-    /* delete */    _Hs_Destructor,
-    /* Duplicate */ NULL);
+    /* delete */    _Hs_Destructor);
 
 /* Now the iterator stuff to go along with it. */
 
@@ -3009,7 +2959,7 @@ MarkerInfo* Hs_NonZeroSet(HashSequence* hs)
 
     HashSequenceIterator *hsi = Hsi_New(hs);
     HashValidityItem hvi;
-    MarkerInfo *mi = Mi_New(0,0);
+    MarkerInfo *mi = Mi_NEW(0,0);
 
     while(Hsi_NEXT(&hvi, hsi))
     {
@@ -3044,7 +2994,7 @@ HashTable* Hs_ToHashTable(HashSequence *hs)
 	    {
 		HashObject *new_k = ALLOCATEHashObject();
 		Hk_COPY(H_Hash_RW(new_k), &hvi.hk);
-		H_GIVE_MARKER_INFO(new_k, Mi_New(hvi.start, hvi.end));
+		H_GIVE_MARKER_INFO(new_k, Mi_NEW(hvi.start, hvi.end));
 		Ht_Give(ht, new_k);
 	    }
 	    else
@@ -3139,7 +3089,7 @@ HashTable *Ht_Summarize_Finish(HashSequence *hs)
 		HashObject * _restrict_ new_k = ALLOCATEHashObject();
 
 		Hk_COPY(H_Hash_RW(new_k), &hk);
-		H_GIVE_MARKER_INFO(new_k, Mi_New(hvi.start, hvi.end));
+		H_GIVE_MARKER_INFO(new_k, Mi_NEW(hvi.start, hvi.end));
 		/* printf("\n it's this: "); */
 		/* H_debug_print(new_k); */
 		Ht_Give(ht, new_k);

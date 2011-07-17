@@ -278,7 +278,14 @@ class TestHashTableBasic(unittest.TestCase):
 
         ibd.O_DecRef(ht)
 
-        
+    def test05_Corner_01_Close_0(self):
+        self.checkHkList(
+            [exactHashKey("00000000000000000000000000000000")])
+
+    def test05_Corner_01_Close_0b(self):
+        self.checkHkList(
+            [exactHashKey("00000000000000000000000000000001")])
+
     def test05_Corner_01_Close_1(self):
         self.checkHkList(
             [exactHashKey("00000000000000000000000000000000"),

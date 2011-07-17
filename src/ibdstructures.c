@@ -96,36 +96,31 @@ DEFINE_OBJECT(
     /* Name. */     IBDGraph,
     /* BaseType */  HashObject,
     /* construct */ _IBDGraph_Construct,
-    /* delete */    _IBDGraph_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _IBDGraph_Destroy);
 
 DEFINE_OBJECT(
     /* Name. */     IBDGraphNode,
     /* BaseType */  HashObject,
     /* construct */ _IBDGraphNode_Construct,
-    /* delete */    _IBDGraphNode_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _IBDGraphNode_Destroy);
 
 DEFINE_OBJECT(
     /* Name. */     IBDGraphEdge,
     /* BaseType */  HashObject,
     /* construct */ _IBDGraphEdge_Construct,
-    /* delete */    _IBDGraphEdge_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _IBDGraphEdge_Destroy);
 
 DEFINE_OBJECT(
     /* Name. */     _IBDGraphNodeReference,
     /* BaseType */  HashObject,
     /* construct */ NULL,
-    /* delete */    _IBDGraphNodeReference_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _IBDGraphNodeReference_Destroy);
 
 DEFINE_OBJECT(
     /* Name. */     _IBDGraphEdgeReference,
     /* BaseType */  HashObject,
     /* construct */ NULL,
-    /* delete */    _IBDGraphEdgeReference_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _IBDGraphEdgeReference_Destroy);
 
 
 /************************************************************
@@ -569,8 +564,7 @@ DEFINE_OBJECT(
     /* Name. */     IBDGraphEquivalences,
     /* BaseType */  Object,
     /* construct */ NULL,
-    /* delete */    _IBDGraphEquivalences_Destroy,
-    /* Duplicate */ NULL);
+    /* delete */    _IBDGraphEquivalences_Destroy);
 
 
 IBDGraphEquivalences* NewIBDGraphEquivalences(HashTable *ht, size_t n_graphs)

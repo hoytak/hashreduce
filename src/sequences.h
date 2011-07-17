@@ -147,7 +147,7 @@
     }									\
 									\
     DEFINE_OBJECT(name, base_type, _##name##_Constructor,		\
-		  _##name##_Destructor, NULL);				\
+		  _##name##_Destructor);				\
 									\
     DEFINE_GLOBAL_MEMORY_POOL(__##name##_Node);				\
     DEFINE_GLOBAL_MEMORY_POOL(name##Iterator);				\
