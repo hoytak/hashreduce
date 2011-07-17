@@ -10,6 +10,7 @@
 #ifndef MARKERINFO_H
 #define MARKERINFO_H
 
+#include "types.h"
 #include "object.h"
 #include "memorypool.h"
 #include <stdbool.h>
@@ -36,7 +37,7 @@ typedef const MarkerRange* cmr_ptr;
 typedef struct {
     OBJECT_ITEMS;
     MarkerRange r;
-    unsigned long num_array_ranges, allocated_array_ranges;
+    size_t num_array_ranges, allocated_array_ranges;
     MarkerRange* range_list;
 #ifndef NDEBUG
     size_t lock_count;
@@ -45,8 +46,8 @@ typedef struct {
 
 DECLARE_OBJECT(MarkerInfo);
 
-typedef MarkerInfo* mi_ptr;
-typedef const MarkerInfo* cmi_ptr;
+typedef  MarkerInfo * _restrict_ mi_ptr;
+typedef const MarkerInfo * _restrict_ cmi_ptr;
 
 /*****************************************
  *

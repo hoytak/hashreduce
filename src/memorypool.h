@@ -69,7 +69,7 @@
 	mpp->memblock = NULL;						\
     }									\
 									\
-    static void _MP_AdvancedPagePointer_##Type()			\
+    static void _MP_AdvancePagePointer_##Type()				\
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
@@ -89,7 +89,7 @@
 	    assert(mp->first_page_with_free_spot < mp->allocated_pages); \
 									\
 	    /* Need more allocation? */					\
-	    if(mp->pages[mp->first_page_with_free_spot].memblock == NULL) \
+	    if(likely(mp->pages[mp->first_page_with_free_spot].memblock == NULL)) \
 	    {								\
 		_MP_Page_##Type *mpp = &(mp->pages[mp->first_page_with_free_spot]); \
 		_MP_InitPage_##Type(mpp);				\
@@ -110,7 +110,7 @@
 	    _MP_Init_##Type(mp);					\
 									\
 	if(unlikely(! (mp->pages[mp->first_page_with_free_spot].available_mask) )) \
-	    _MP_AdvancedPagePointer_##Type(mp);				\
+	    _MP_AdvancePagePointer_##Type(mp);				\
 									\
 	_MP_Page_##Type *mpp = &(mp->pages[mp->first_page_with_free_spot]); \
 									\

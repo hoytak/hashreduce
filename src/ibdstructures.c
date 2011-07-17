@@ -281,7 +281,7 @@ void IBDGraph_Connect(IBDGraph *g, IBDGraphEdge *e, IBDGraphNode *n,
     {
 	nr = (HashObject*)NewIBDGraphNodeReference(n);
 	H_COPY_AS_UNMARKED(nr, nh);
-	H_GIVE_MARKER_INFO(nr, Mi_New(valid_start, valid_end));
+	H_GIVE_MARKER_INFO(nr, Mi_NEW(valid_start, valid_end));
 	O_Cast(_IBDGraphNodeReference, nr)->node = n;
 	Ht_Give(e->nodes, nr);
     }
