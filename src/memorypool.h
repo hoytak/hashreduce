@@ -27,30 +27,30 @@
 	size_t candidate_page_for_deallocation;				\
     } MemoryPool_##Type;						
 
+#define _MP_MEM_POOL_STEP 8
+
 static inline bool _MP_IndexMasterPage(size_t idx)	
 {
-    return (idx <= 4) ? true : ((idx & 3) == 0);
+    return (idx <= _MP_MEM_POOL_STEP) ? true : ((idx & (_MP_MEM_POOL_STEP-1)) == 0);
 }
 
 static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 {
     assert(_MP_IndexMasterPage(idx));
-    return (idx < 4) ? 1 : 4;
+    return (idx < _MP_MEM_POOL_STEP) ? 1 : _MP_MEM_POOL_STEP;
 }
 
 #define _DECLARE_MEMORY_POOL_BASE_FUNCTIONS(Type)			\
-    									\
 									\
-    static inline void _MP_InitPages_##Type(size_t idx)			\
+    static void _MP_InitPages_##Type(size_t idx)			\
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 	_MP_Page_##Type *mpp = &(mp->pages[idx]);			\
 	size_t num = _MP_IndexMasterPage_Size(idx);			\
 	assert(mpp->memblock == NULL);					\
-									\
 	Type* ptr = (Type*)calloc(bitsizeof(bitfield)*num, sizeof(Type)); \
 	CHECK_MALLOC(ptr);						\
-	size_t i;							\
+	int i;								\
 	for(i = 0; i < num; ++i)					\
 	{								\
 	    (mpp + i)->memblock = ptr + i*bitsizeof(bitfield);		\
@@ -74,7 +74,7 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
-	mp->allocated_pages = 32;					\
+	mp->allocated_pages = 4*_MP_MEM_POOL_STEP;			\
 	mp->first_page_with_free_spot = 0;				\
 	mp->pages = (_MP_Page_##Type*)calloc(mp->allocated_pages, sizeof(_MP_Page_##Type) ); \
 	_MP_InitPages_##Type(0);					\
@@ -105,8 +105,7 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 	assert(mp->first_page_with_free_spot < mp->allocated_pages);	\
 	assert(isPowerOf2(mp->allocated_pages));			\
 									\
-	while(true)							\
-	{								\
+	do{								\
 	    assert(NULL!=mp->pages[mp->first_page_with_free_spot].memblock); \
 	    assert(mp->pages[mp->first_page_with_free_spot].available_mask == 0); \
 									\
@@ -125,7 +124,7 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 		assert(mp->first_page_with_free_spot < mp->allocated_pages); \
 									\
 		/* Need more allocation? */				\
-		if(mp->pages[mp->first_page_with_free_spot].memblock == NULL) \
+		if(likely(mp->pages[mp->first_page_with_free_spot].memblock == NULL)) \
 		{							\
 		    _MP_InitPages_##Type(mp->first_page_with_free_spot); \
 		    return;						\
@@ -134,13 +133,10 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 									\
 	    assert(mp->pages[mp->first_page_with_free_spot].memblock != NULL); \
 									\
-	    /* Simply the next one that has stuff available? */		\
-	    if(mp->pages[mp->first_page_with_free_spot].available_mask != 0) \
-		return;							\
-	}								\
+	}while(unlikely(likely(mp->pages[mp->first_page_with_free_spot].available_mask == 0))); \
     }									\
     									\
-    static Type* Mp_New##Type()						\
+    static Type*  Mp_New##Type()					\
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
