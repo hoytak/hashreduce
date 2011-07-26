@@ -125,8 +125,8 @@ int main(int argc, char **argv)
 	    IBDGraphEquivalences_Print(ibd_equivalences);
 
 	    elapsed2 = (double)clock() - elapsed1;
-	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
-	    printf("Finding the equivalence classes took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    // printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
+	    // printf("Finding the equivalence classes took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
 	    break;
 	    
 	case 'r':
@@ -137,7 +137,6 @@ int main(int argc, char **argv)
 	    createIBDGraphs(argv[1], ibd_graphs);
 
 	    elapsed1 = (double)clock() - start;
-	    printf("\nTesting range from marker %d to %d\n\n", marker_loc[0], marker_loc[1]);
 
 	    ibd_equivalences = IBDGraphEquivalenceClassesOfMarkerRange(ibd_graphs, marker_loc[0],
 		marker_loc[1]);
@@ -146,8 +145,8 @@ int main(int argc, char **argv)
 	    IBDGraphEquivalences_Print(ibd_equivalences);
 
 	    elapsed2 = (double)clock() - elapsed1;
-	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
-	    printf("Finding the equivalence classes took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    //printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
+	    //printf("Finding the equivalence classes took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
 	    break;
 
 	case 's':
@@ -501,6 +500,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 		
     }
     
+    Igl_Give(ibd_graphs, ibd_graph);
 
     fclose(fp);
    
