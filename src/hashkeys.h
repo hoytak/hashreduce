@@ -39,16 +39,14 @@ typedef unsigned int hashfieldtype;
  * different ways to access the data
  **************************************************/
 
-typedef struct {
-    union {
+typedef union {
 #ifndef NO_UINT128
-	uint128_type hk128;
+  uint128_type  hk128;
 #endif
-	hashfieldtype hk[H_NUM_COMPONENTS];
-	uint64_t      hk64[H_NUM_64BIT_COMPONENTS];
-	uint32_t      hk32[H_NUM_32BIT_COMPONENTS];
-	uint8_t       hk8[H_NUM_8BIT_COMPONENTS];
-    };
+  hashfieldtype hk[H_NUM_COMPONENTS];
+  uint64_t      hk64[H_NUM_64BIT_COMPONENTS];
+  uint32_t      hk32[H_NUM_32BIT_COMPONENTS];
+  uint8_t       hk8[H_NUM_8BIT_COMPONENTS];
 } HashKey;
 
 /* Typedefs */

@@ -36,7 +36,7 @@ include(CheckCCompilerFlag)
 ################################################################################
 # Check for compiler options
 
-set(CMAKE_C_FLAGS_DEBUG "-g3 -O1 -UNDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-g3 -O1 -UNDEBUG -Wall")
 set(CMAKE_C_FLAGS_RELEASE "-g -O3 -DNDEBUG")
 
 if(ENABLE_CHECKS)

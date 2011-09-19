@@ -2570,7 +2570,7 @@ void Ht_Swap(ht_rptr ht1, ht_rptr ht2)
     Ht_SWAP(ht1, ht2);
 }
 
-ht_rptr Ht_KeySet(ht_rptr ht)
+ht_rptr Ht_KeySet(ht_crptr ht)
 {
     ht_rptr new_ht = NewSizeOptimizedHashTable(Ht_Size(ht));
     HashObject *h;
@@ -3162,5 +3162,23 @@ MarkerInfo* Ht_EqualitySet(HashTable *ht1, HashTable *ht2)
     HashSequence* hs = Ht_EqualitySetUpdate(NULL, ht1);
     Ht_EqualitySetUpdate(hs, ht2);
     return Ht_EqualitySetFinish(hs);
+}
+
+MarkerInfo* Ht_EqualToHash(HashTable *ht, HashKey hk) 
+{
+
+    HashTableMarkerIterator htmi;
+    Htmi_INIT(ht, &htmi);
+    MarkerInfo *mi = Mi_NEW(0,0);
+    
+    HashValidityItem hvi;
+
+    while(Htmi_NEXT(&hvi, &htmi)) 
+    {
+	if(Hk_EQUAL(&hvi.hk, &hk))
+	    Mi_AppendValidRange(mi, hvi.start, hvi.end);
+    }
+
+    return mi;
 }
 

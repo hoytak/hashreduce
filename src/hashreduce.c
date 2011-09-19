@@ -30,17 +30,17 @@ void GiveVSet(obj_ptr h, vset_ptr mi)
     H_GIVE_MARKER_INFO(h, mi);
 }
 
-void  AddVSetInterval(obj_ptr h, markerinfo a, markerinfo b)
+void  AddVSetInterval(obj_ptr h, markertype a, markertype b)
 {
     H_ADD_MARKER_VALID_RANGE(h, a, b);
 }
 
-markerinfo VSetMin(cobj_ptr v)
+markertype VSetMin(cobj_ptr v)
 {
     return Mi_Min(H_Mi(v));
 }
 
-markerinfo VSetMax(cobj_ptr v)
+markertype VSetMax(cobj_ptr v)
 {
     return Mi_Max(H_Mi(v));
 }
@@ -74,7 +74,7 @@ static inline cvset_ptr _GetAsVSet(cobj_ptr v)
 	return H_Mi(O_CastC(HashObject, v));
     else
     {
-	fprintf(stderr, "Type of object passed to VSetUnion not MarkerInfo or HashObject.");
+	fprintf(stderr, "Type of object passed to VSetUnion not Markertype or HashObject.");
 	return NULL;
     }
 }
@@ -101,7 +101,7 @@ vset_ptr VSetIntersectionUpdate(vset_ptr v_dest, cobj_ptr v)
 
 vset_ptr Difference(cobj_ptr v1, cobj_ptr v2)
 {
-    return Mi_Difference(_GetAsVSet(v1), _GetAsVSet(v));
+    return Mi_Difference(_GetAsVSet(v1), _GetAsVSet(v2));
 }
 
 bool Contains(mset_ptr T, obj_ptr h)
@@ -113,7 +113,7 @@ bool Contains(mset_ptr T, obj_ptr h)
 }
 
 
-bool ExistsAt(mset_ptr T, obj_ptr h, markerinfo m)
+bool ExistsAt(mset_ptr T, obj_ptr h, markertype m)
 {
     if(!O_IsType(HashObject, h))
 	return false;
@@ -145,7 +145,7 @@ void Insert(mset_ptr T, obj_ptr h)
 
 void Give(mset_ptr T, obj_ptr k)  /* Like insert, but steals the reference. */
 {
-    Ht_Give(T, O_Cast(HashObject, h));
+    Ht_Give(T, O_Cast(HashObject, k));
 }
 
 obj_ptr HashAtMarker(mset_ptr T, markertype m)
@@ -153,7 +153,7 @@ obj_ptr HashAtMarker(mset_ptr T, markertype m)
     return Ht_HashAtMarkerPoint(NULL, T, m);
 }
 
-bool EqualAtMarker(mset_ptr T1, mset_ptr T2, markerinfo m)
+bool EqualAtMarker(mset_ptr T1, mset_ptr T2, markertype m)
 {
     return Ht_EqualAtMarker(T1, T2, m);
 }
@@ -177,30 +177,53 @@ vset_ptr EqualityVSetFinish(hash_accumulator accumulator)
 
 vset_ptr EqualToHash(mset_ptr T, cobj_ptr h)
 {
-    return Ht_EqualToHash(T, h);
+    return Ht_EqualToHash(T, *H_Hash_RO(h));
 }
 
 /* These functions provide set operations; they are to be used the
  * same way the VSetX functions are.  E.g.
 */
 
-mset_ptr MSetUnion(mset_ptr T1, mset_ptr T2);
-mset_ptr MSetUnionUpdate(mset_ptr T, mset_ptr T1);
+mset_ptr MSetUnion(mset_ptr T1, mset_ptr T2)
+{
+    return Ht_Union(T1, T2);
+}
 
-mset_ptr MSetIntersection(mset_ptr T1, mset_ptr T2);
-mset_ptr MSetIntersectionUpdate(mset_ptr T, mset_ptr T2);
+mset_ptr MSetUnionUpdate(mset_ptr T, mset_ptr T1)
+{
+    return Ht_UnionUpdate(T, T1);
+}
 
-mset_ptr MSetDifference(mset_ptr T1, mset_ptr T2);
+mset_ptr MSetIntersection(mset_ptr T1, mset_ptr T2)
+{
+    return Ht_Intersection(T1, T2);
+}
 
-mset_ptr KeySet(mset_ptr T);
+mset_ptr MSetIntersectionUpdate(mset_ptr T, mset_ptr T2)
+{
+    return Ht_IntersectionUpdate(T, T2);
+}
 
-mset_ptr MSetReduce(mset_ptr T);
+mset_ptr MSetDifference(mset_ptr T1, mset_ptr T2)
+{
+    return Ht_Difference(T1, T2);
+}
+
+mset_ptr KeySet(mset_ptr T)
+{
+    return Ht_KeySet(T);
+}
+
+mset_ptr MSetReduce(mset_ptr T)
+{
+    return Ht_ReduceTable(T);
+}
 
 /* The summarize functions work via an intermediate accumulator, which
  * may be null (in which case one is created.  The proper way of using
  * these is as follows:
  
- mset_ptr accumulator = NULL;
+ HashSequence accumulator = NULL;
  for (T in collection) {
     accumulator = Summarize_Add(accumulator, T);
  }
@@ -208,8 +231,12 @@ mset_ptr MSetReduce(mset_ptr T);
  summary = Summarize_Finish(accumulator);
  */
 
-mset_ptr SummarizeUpdate(mset_ptr accumulator, mset_ptr ht);
-mset_ptr SummarizeFinish(mset_ptr accumulator);
+hash_accumulator SummarizeUpdate(hash_accumulator accumulator, mset_ptr T)
+{
+    return Ht_Summarize_Update(accumulator, T);
+}
 
-
-#endif /* _HASHREDUCE_INLINE_H_ */
+mset_ptr SummarizeFinish(hash_accumulator accumulator)
+{
+    return Ht_Summarize_Finish(accumulator);
+}

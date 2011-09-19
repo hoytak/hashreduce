@@ -27,8 +27,8 @@ add_library (hashreduce SHARED
   randfunctions.c
   randfunctions.h
   randfunctions_inline.h
-  # hashreduce.c
-  # hashreduce.h
+  hashreduce.c
+  hashreduce.h
   )
 
 install(TARGETS hashreduce DESTINATION lib)

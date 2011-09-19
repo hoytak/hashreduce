@@ -38,15 +38,15 @@ typedef cmi_ptr cvset_ptr;
 
 bool  IsValid(cobj_ptr h, markertype m);
 
-vset_ptr ViewVSet(cobj_ptr h);
-vset_ptr GetVSet(cobj_ptr h);
+vset_ptr ViewVSet(obj_ptr h);
+vset_ptr GetVSet(obj_ptr h);
 void  SetVSet(obj_ptr h, vset_ptr mi);
 
-void  AddVSetInterval(obj_ptr h, markerinfo a, markerinfo b);
-void  ClearVSetInterval(obj_ptr h, markerinfo a, markerinfo b);
+void  AddVSetInterval(obj_ptr h, markertype a, markertype b);
+void  ClearVSetInterval(obj_ptr h, markertype a, markertype b);
 
-markerinfo VSetMin(cobj_ptr v);
-markerinfo VSetMax(cobj_ptr v);
+markertype VSetMin(cobj_ptr v);
+markertype VSetMax(cobj_ptr v);
 
 /********************************************************************************
  *
@@ -87,15 +87,15 @@ typedef HashTable* mset_ptr;
 typedef HashSequence* hash_accumulator;
 
 bool Contains(mset_ptr T, obj_ptr h);
-bool ContainsAt(mset_ptr T, obj_ptr h, markerinfo m);
+bool ContainsAt(mset_ptr T, obj_ptr h, markertype m);
 obj_ptr Get(mset_ptr T, obj_ptr h);
 void Insert(mset_ptr T, obj_ptr k);
 void Give(mset_ptr T, obj_ptr k);  /* Like insert, but steals the reference. */
 
-obj_ptr HashAtMarker(mset_ptr T, obj_ptr k);
+obj_ptr HashAtMarker(mset_ptr T, markertype m);
 obj_ptr MSetHash(mset_ptr T);  /* Returns a hash of everything. */
 
-bool EqualAtMarker(mset_ptr T1, mset_ptr T2, markerinfo m);
+bool EqualAtMarker(mset_ptr T1, mset_ptr T2, markertype m);
 
 /* Deal with more than 2 tables with EqualitySetUpdate, as follows: 
  
@@ -137,7 +137,7 @@ mset_ptr MSetReduce(mset_ptr T);
  * may be null (in which case one is created.  The proper way of using
  * these is as follows:
  
- mset_ptr accumulator = NULL;
+ hash_accumulator accumulator = NULL;
  for (T in collection) {
     accumulator = Summarize_Add(accumulator, T);
  }
@@ -145,7 +145,7 @@ mset_ptr MSetReduce(mset_ptr T);
  summary = Summarize_Finish(accumulator);
  */
 
-mset_ptr SummarizeUpdate(mset_ptr accumulator, mset_ptr ht);
-mset_ptr SummarizeFinish(mset_ptr accumulator);
+hash_accumulator SummarizeUpdate(hash_accumulator accumulator, mset_ptr T);
+mset_ptr SummarizeFinish(hash_accumulator accumulator);
 
 #endif /* _HASHREDUCE_H_ */

@@ -361,10 +361,10 @@ static inline bool __O_IsTypeCheck(const ObjectInfo *oi, const ObjectInfo *objin
 
 /* Returns true if type of cast is type or subtype of object. */
 #define O_IsType(ObjectType, obj)					\
-    (__O_IsTypeCheck(&O_GlobalObjectInfoStruct(ObjectType), (obj)->_obj_type_info))
+    (__O_IsTypeCheck(&O_GlobalObjectInfoStruct(ObjectType), ((const Object*)obj)->_obj_type_info))
 
 #define O_IsExactType(ObjectType, obj)					\
-    ( (obj)->_obj_type_info == &O_GlobalObjectInfoStruct(ObjectType))
+    ( ((const Object*)obj)->_obj_type_info == &O_GlobalObjectInfoStruct(ObjectType))
 
 
 /************************************************************

@@ -322,7 +322,7 @@ HashSequence* Ht_EqualitySetUpdate(HashSequence *accumulator, HashTable *ht);
 
 MarkerInfo* Ht_EqualitySetFinish(HashSequence *accumulator);
 
-MarkerInfo* Ht_EqualToHash(HashTable *ht, HashObject *h);
+MarkerInfo* Ht_EqualToHash(HashTable *ht, HashKey hk);
 
 /* Set operations over hash tables. */ 
 
@@ -333,6 +333,8 @@ ht_rptr Ht_Union(ht_crptr ht1, ht_crptr ht2);
 ht_rptr Ht_UnionUpdate(ht_rptr ht_accumulator, ht_crptr ht2);
 
 ht_rptr Ht_Difference(ht_crptr ht1, ht_crptr ht2);
+
+ht_rptr Ht_KeySet(ht_crptr ht);
 
 /* Swaps the content of the two hash tables. */
 void Ht_Swap(ht_rptr ht1, ht_rptr ht2);
