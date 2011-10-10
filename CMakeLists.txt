@@ -7,7 +7,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(ENABLE_CHECKS "Enable internal consistency checks for debugging (very slow)." "No")
-option(BUILD_IBD "Enable building of ibd graph related features." "Yes")
+option(BUILD_IBD "Enable building of ibd graph related features." "No")
+option(BUILD_EXAMPLES "Enable building of examples related features." "Yes")
 option(BUILD_C_IBD_COMPARE "Enable building of ibd graph C-only library related features (rather than python version)." "Yes")
 option(PYTHON_LINK_STATIC "Link against the python libraries statically." "No")
 
@@ -222,6 +223,12 @@ if(BUILD_IBD)
     target_link_libraries(ibd_compare "${PYTHON_LIBRARY}" m)
     install(TARGETS ibd_compare DESTINATION bin)
   endif()
+endif()
+
+if(BUILD_EXAMPLES)
+    include_directories(src/)
+    add_executable(population_example examples/populations.c)
+    target_link_libraries(ibd_compare m)
 endif()
 
 add_subdirectory(src)

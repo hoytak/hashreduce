@@ -9,3 +9,4 @@
 #include "hashobject.c"
 #include "hashtable.c"
 #include "ibdstructures.c"
+#include "hashreduce.c"
