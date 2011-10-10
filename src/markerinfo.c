@@ -268,9 +268,11 @@ void Mi_AddValidRange(mi_ptr mi, markertype start, markertype end)
 {
     assert(!Mi_IsDebugLocked(mi));
 
-    if(unlikely(start > end && marker_range_warnings_enabled))
+    if(unlikely(start >= end && marker_range_warnings_enabled))
     {
-	fprintf(stderr, "WARNING: Start of range (%ld) is > end of range (%ld); no range added.", start, end);
+        if(start != end)
+	    fprintf(stderr, "WARNING: Start of range (%ld) is > end of range (%ld); no range added.", start, end);
+	
 	return;
     }
 

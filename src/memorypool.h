@@ -106,10 +106,12 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 	assert(isPowerOf2(mp->allocated_pages));			\
 									\
 	do{								\
-	    assert(NULL!=mp->pages[mp->first_page_with_free_spot].memblock); \
 	    assert(mp->pages[mp->first_page_with_free_spot].available_mask == 0); \
 									\
-	    ++mp->first_page_with_free_spot;				\
+	    if(mp->pages[mp->first_page_with_free_spot].memblock != NULL) \
+		++mp->first_page_with_free_spot;			\
+	    else							\
+		assert(_MP_IndexMasterPage(mp->first_page_with_free_spot)); \
 									\
 	    if(_MP_IndexMasterPage(mp->first_page_with_free_spot))	\
 	    {								\
