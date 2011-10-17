@@ -1,19 +1,33 @@
-To compile or install, run "cmake ." followed by make or make install
-from the command line.
+To compile or install, run "cmake ." followed by make from the command
+line.  The cross-platform cmake program is required to compile the
+library; on linux, it is in the common repositories.  Otherwise, see
+http://www.cmake.org/.  
+
 
 To run the suite of unit tests, do the following:
 
-make
 cd tests
 python tests.py
 
 There may be several warnings printed; these are okay.  Note that
 python is required to run these tests.
 
-To compile the documentation, or for more information, visit
-http://www.stat.washington.edu/~hoytak/code/hashreduce.
+
+To install the library file and headers, run 
+
+make install
 
 
+If you wish to install them to an alternate location, first run 
+
+cmake -DCMAKE_INSTALL_PREFIX=<dir> ./
+
+then 
+
+make install
+
+
+Bug reports may be submitted at http://github.com/hoytak/hashreduce.  
 
 
 

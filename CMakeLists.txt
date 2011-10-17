@@ -7,8 +7,8 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 option(ENABLE_CHECKS "Enable internal consistency checks for debugging (very slow)." "No")
-option(BUILD_IBD "Enable building of ibd graph related features." "No")
-option(BUILD_EXAMPLES "Enable building of examples related features." "Yes")
+option(BUILD_IBD "Enable building of ibd graph related features." "Yes")
+option(BUILD_EXAMPLES "Enable building of example code." "Yes")
 option(BUILD_C_IBD_COMPARE "Enable building of ibd graph C-only library related features (rather than python version)." "Yes")
 option(PYTHON_LINK_STATIC "Link against the python libraries statically." "No")
 
