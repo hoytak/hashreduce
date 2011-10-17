@@ -65,8 +65,6 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     message("Enabling -ffast-math flag for release.")
   endif()
   
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-
   if(CMAKE_BUILD_TYPE_TOLOWER STREQUAL "debug")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_DEBUG}")
   elseif(CMAKE_BUILD_TYPE_TOLOWER STREQUAL "release")
