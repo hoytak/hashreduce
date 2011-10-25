@@ -120,6 +120,27 @@
     name##Iterator* abbreviation##i_New(name *hs);			\
     bool abbreviation##i_Next(item_type* hvi, name##Iterator *hsi);	\
     void abbreviation##i_Finish(name##Iterator *hsi);			\
+									\
+    static inline item_type abbreviation##_AtIndex(name *obj, size_t index) \
+    {									\
+	name##Iterator hsi;						\
+	abbreviation##i_INIT(obj, &hsi);				\
+	item_type ret;							\
+									\
+	while(1)							\
+	{								\
+	    bool if_false_then_index_out_of_range =			\
+		abbreviation##i_NEXT(&ret, &hsi);			\
+									\
+	    assert(if_false_then_index_out_of_range);			\
+									\
+	    if(index == 0)						\
+		return ret;						\
+									\
+	    --index;							\
+	}								\
+    }
+    
 
 #define DEFINE_NEW_SEQUENCE_OBJECT(name, base_type, base_type_items,	\
 				   item_type, abbreviation, count, do_ref_counting) \

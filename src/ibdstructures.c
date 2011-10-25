@@ -400,6 +400,16 @@ markertype IBDGraphInvariantRegionUpper(IBDGraph *g, markertype m)
     return end;
 }
 
+mi_ptr IBDGraphInvariantSet(IBDGraph *g, markertype m)
+{
+    HashObject *h = IBDGraphGetHashAtMarker(g, m);
+    
+    HashKey hk = *H_Hash_RO(h);
+    O_DECREF(h);
+
+    return Ht_EqualToHash(g->graph_hashes, hk);
+}
+
 HashObject* IBDGraphViewHash(IBDGraph *g)
 {
     if(g->dirty)
@@ -521,6 +531,12 @@ void Igl_Give(IBDGraphList* gl, IBDGraph* g)
 void Igl_Add(IBDGraphList* gl, IBDGraph* g)
 {
     Igl_Append(gl, g);
+}
+
+/* Returns a view of graph at a particular index. */
+IBDGraph* Igl_ViewItem(IBDGraphList* gl, size_t index)
+{
+    return Igl_AtIndex(gl, index);
 }
 
 /* These functions add in the bins. */

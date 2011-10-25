@@ -93,6 +93,11 @@ int main(int argc, char **argv)
 
     IBDGraphEquivalences *ibd_equivalences;
 
+    long index;
+    markertype m, ml, mu;
+    IBDGraph *g;
+    mi_ptr invariant_set;
+
     // parsing the command line options
     if ((argc > 2) && (argv[2][0] == '-'))
     {
@@ -100,14 +105,15 @@ int main(int argc, char **argv)
 	{
 	case 'h':
 	    // print usage
-	    printf("\nUsage:\t\t./ibdgraph <file> <NUM_GRAPHS> <NUM_EDGES> <option>\n");
+	    printf("\nUsage:\t\t./ibdgraph <file> <option>\n");
 	    printf("Options:\t-m <int>\tPrints equivalent graphs at marker <>\n");
 	    printf("\t\t-r <int> <int>\tPrints graphs same over range <> to <>\n");
-	    printf("\t\t-s <int> <int>\tPrints validity range of graph at marker\n");
-	    printf("\t\t-v <int>\tPrints entire validity range of graph\n\n");
+	    printf("\t\t-s <int> <int>\tPrints invariance range of graph at marker.\n");
+	    printf("\t\t-v <int> <int>\tPrints entire invariance set of graph at marker.\n\n");
 	    break;
 
 	case 'm':
+
 	    // get marker location
 	    marker_loc[0] = atoi(argv[3]);
 	    marker_loc[1] = -1;
@@ -115,7 +121,7 @@ int main(int argc, char **argv)
 	    {
 		printf("\nERROR: Incorrect number of arguments for the -m flag.\n");
 		printf("Use the -h or --help flag to see options and usage.\n\n");
-		break;
+		exit(1);
 	    }
 	    printf("\nTesting at specified marker location %d.\n\n", marker_loc[0]);
 	    createIBDGraphs(argv[1], ibd_graphs);
@@ -130,6 +136,13 @@ int main(int argc, char **argv)
 	    break;
 	    
 	case 'r':
+	    if(argc != 5) 
+	    {
+		printf("\nERROR: Incorrect number of arguments for the -r flag.\n");
+		printf("Use the -h or --help flag to see options and usage.\n\n");
+		exit(1);
+	    }
+
 	    // get range
 	    marker_loc[0] = atoi(argv[3]);
 	    marker_loc[1] = atoi(argv[4]) + 1;	    
@@ -145,37 +158,81 @@ int main(int argc, char **argv)
 	    IBDGraphEquivalences_Print(ibd_equivalences);
 
 	    elapsed2 = (double)clock() - elapsed1;
-	    //printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
-	    //printf("Finding the equivalence classes took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    
+	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
+	    printf("Finding the equivalence classes took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    
 	    break;
 
 	case 's':
+	    if(argc != 5) 
+	    {
+		printf("\nERROR: Incorrect number of arguments for the -s flag.\n");
+		printf("Use the -h or --help flag to see options and usage.\n\n");
+		exit(1);
+	    }
+
 	    // get graph number and specified marker
-	    
-	    printf("\nDisplaying range around marker %d for graph %d.\n\n", upper, graph);
 	    createIBDGraphs(argv[1], ibd_graphs);
 	    elapsed1 = (double)clock() - start;
-	    printf("\nDisplaying range around marker %d for graph %d:\n\n", 
-		   atoi(argv[5]), atoi(argv[6]));
 
-	    // IBDPrintRange(ibd_graphs[atoi(argv[6]) - 1], atoi(argv[5]), h);
-	    // IBDGraph_Print(ibd_graphs[atoi(argv[5]) - 1]);
+	    index = atoi(argv[3]) - 1;
+	    if(index < 0 || index >= Igl_Size(ibd_graphs)) 
+	    {
+		printf("ERROR: Index %ld out of range, must be 1 <= index <= %ld.", index+1, Igl_Size(ibd_graphs));
+		exit(1);
+	    }
+	    m = atol(argv[4]);
+	    g = Igl_ViewItem(ibd_graphs, (size_t)index);
 
+	    IBDGraphInvariantRegion(&ml, &mu, g, m);
+	    
+	    printf("IBD graph %ld is invariant on the interval ", index+1);
+	    Mi_PrintInterval(ml, mu);
+	    printf(".\n");
 
 	    elapsed2 = (double)clock() - elapsed1;
+	    
 	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
-	    printf("Printing the validity range took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    printf("Calculating everything else took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    
 	    break;
 
 	case 'a':
-	    // get graph number
+	    if(argc != 5) 
+	    {
+		printf("\nERROR: Incorrect number of arguments for the -s flag.\n");
+		printf("Use the -h or --help flag to see options and usage.\n\n");
+		exit(1);
+	    }
+
+	    // get graph number and specified marker
 	    createIBDGraphs(argv[1], ibd_graphs);
 	    elapsed1 = (double)clock() - start;
-	    printf("\nDisplaying marker validity intervals for graph %d:\n\n", atoi(argv[5]));
-	    // IBDGraph_Print(ibd_graphs[atoi(argv[5]) - 1]);
+
+	    index = atoi(argv[3]) - 1;
+	    if(index < 0 || index >= Igl_Size(ibd_graphs)) 
+	    {
+		printf("ERROR: Index %ld out of range, must be 1 <= index <= %ld.", index+1, Igl_Size(ibd_graphs));
+		exit(1);
+	    }
+
+	    m = atol(argv[4]);
+	    g = Igl_ViewItem(ibd_graphs, (size_t)index);
+
+	    invariant_set = IBDGraphInvariantSet(g, m);
+	    
+	    printf("IBD graph %ld is invariant on ", index+1);
+	    Mi_Print(invariant_set);
+	    printf(".\n");
+
+	    O_DECREF(invariant_set);
+
 	    elapsed2 = (double)clock() - elapsed1;
+
 	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
-	    printf("Printing the validity range took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    printf("Calculating everything else took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
+	    
 	    break;
 
 	default:

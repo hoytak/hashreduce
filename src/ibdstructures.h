@@ -99,6 +99,11 @@ void IBDGraphInvariantRegion(markertype *start, markertype *end, IBDGraph *g1, m
 markertype IBDGraphInvariantRegionLower(IBDGraph *g1, markertype m);
 markertype IBDGraphInvariantRegionUpper(IBDGraph *g1, markertype m);
 
+/* Returns a markerinfo object giving all the locations where the
+   ibdgraph structure is equivalent to the structure at marker point
+   m. The caller owns a reference to the returned markerinfo object.*/ 
+mi_ptr IBDGraphInvariantSet(IBDGraph *g, markertype m);
+
 /* These functions can be used for testing whether a (possibly
  * external) edge or node is also present in this graph. */ 
 bool IBDGraphContainsEdge(IBDGraph *g, IBDGraphEdge *e);
@@ -129,6 +134,9 @@ void Igl_Add(IBDGraphList* gl, IBDGraph* g);
 
 /* Returns the size of the IBDGraphList collection. */
 static inline size_t Igl_Size(const IBDGraphList* gl);
+
+/* Returns the graph at a particular index. */
+IBDGraph* Igl_ViewItem(IBDGraphList* gl, size_t index);
 
 /************************************************************
  *

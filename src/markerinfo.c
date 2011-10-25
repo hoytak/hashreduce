@@ -885,29 +885,46 @@ markertype Mr_Minus_Infinity()
     return MARKER_MINUS_INFTY;
 }
 
+void Mi_PrintInterval(markertype ml, markertype mu) 
+{
+    if(ml >= mu) 
+    {
+	printf("[)");
+	return;
+    }
+
+    if(ml == MARKER_MINUS_INFTY) 
+	printf("[-inf,");
+    else
+	printf("[%ld,", ml);
+
+    if(mu == MARKER_PLUS_INFTY) 
+	printf("inf)");
+    else
+	printf("%ld)", mu);
+}
+
 void Mi_Print(cmi_ptr mi)
 {
     if(mi == NULL)
     {
-	printf(" [-inf, inf)");
+	printf("[-inf, inf)");
     }
     else if(mi->num_array_ranges == 0)
     {
-	if(mi->r.start != mi->r.end)
-	    printf(" [%ld,%ld)", mi->r.start, mi->r.end);
-	else
-	    printf(" [)");
+	Mi_PrintInterval(mi->r.start, mi->r.end);
     }
     else
     {
 	int i;
 
-	printf(" ");
-
-	for(i = 0; i < mi->num_array_ranges; ++i)
+	for(i = 0; i < mi->num_array_ranges - 1; ++i)
 	{
-	    printf(" [%ld,%ld), ", mi->range_list[i].start, mi->range_list[i].end);
+	    Mi_PrintInterval(mi->range_list[i].start, mi->range_list[i].end);
+	    printf(", "); 
 	}
+	
+	Mi_PrintInterval(mi->range_list[i].start, mi->range_list[i].end);
     }
 }
 
