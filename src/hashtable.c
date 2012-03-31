@@ -43,6 +43,7 @@ LOCAL_MEMORY_POOL(_HT_MarkerSkipList);
 LOCAL_MEMORY_POOL(_HT_MSL_Branch);
 LOCAL_MEMORY_POOL(_HT_MSL_Leaf);
 LOCAL_MEMORY_POOL(_HT_MSL_NodeStack);
+LOCAL_MEMORY_POOL(_HT_MarkerBTree);
 
 static inline void _Ht_NonTable_Setup(HashTable *ht)
 {
@@ -1495,6 +1496,369 @@ void _Ht_MSL_Drop(HashTable *ht)
 	ht->marker_sl = NULL;
     }
 }
+
+/************************************************************
+ *
+ *  Functions around the new marker B-Tree.
+ *
+ ************************************************************/
+
+
+static inline bool __Ht_MBT_ArraySort_lt(markertype m1, markertype m2) 
+{
+    return m1 < m2;
+}
+
+KSORT_INIT(__Ht_MBT_ArraySort, markertype, __Ht_MBT_ArraySort_lt);
+
+typedef struct __Ht_MBT_Acc_info_t {
+    markertype *acc_array, *auxillary_array; 
+    size_t pos, size;
+    size_t alloc_size, flex_point;
+    size_t auxillary_array_size;
+    size_t auxillary_array_flex_point;
+
+    size_t key_count, hash_table_size;
+} __Ht_MBT_Acc_info;
+
+typedef markertype * __restrict__ _mt_ptr;
+typedef const markertype * __restrict__ _mt_cptr;
+
+static inline void __Ht_MBT_AccArray_Init(__Ht_MBT_Acc_info *tp, HashTable *ht) 
+{
+    tp->alloc_size = 2 * Ht_SIZE(ht);
+    tp->acc_array = (markertype*)malloc(tp->alloc_size * sizeof(markertype));
+    CHECK_MALLOC(tp->acc_array);
+    tp->auxillary_array = NULL;
+    tp->pos = 0;
+    tp->flex_point = 0;
+    tp->size = tp->alloc_size / 2;
+    tp->auxillary_array_size = 0;
+    tp->auxillary_array_flex_point = 0;
+    tp->key_count = 0;
+    tp->hash_table_size = Ht_SIZE(ht);
+}
+
+static inline size_t __Ht_MBT_AccArray_New_Size(__Ht_MBT_Acc_info_t* tp) 
+{
+    return (size_t)(ceil(8 + 1.2 * (double(tp->auxillary_array_size 
+					    * tp->hash_table_size) 
+				    / (1 + tp->key_count ))));
+}
+
+static inline size_t __Ht_MBT_AccArray_SortUnique(markertype *start, markertype *end) 
+{
+    assert(start != end);
+
+    ks_introsort___Ht_ArraySort(end - start, start);
+
+    _mt_ptr m_write = start;
+    _mt_ptr m_read;
+
+    for(m_read = start + 1; m_read != end; ++m_read)
+	*( (*m_read != *m_write) ? ++m_write : m_write) = *m_read;
+
+    return (m_write + 1 - start);
+}
+
+static size_t __Ht_MBT_AccArray_MergeUnique(_mt_cgptr start1, _mt_cptr end1, 
+					    _mt_cptr start2, _mt_cptr end2,  
+					    _mt_ptr dest) 
+{
+    _mt_ptr first = dest;
+
+    assert(start1 != end1 && start2 != end2);
+
+    while(true) 
+    {
+	markertype m = ( *(dest++) = (*start1 < *start2) ? *start1 : *start2);
+
+	while(*start1 == m) 
+	{
+	    if(unlikely(++start1 == end1)) 
+	    {
+		while(true) 
+		{
+		    ++start2;
+		    for(; *start2 == *dest; ++start2)
+			if(start2 == end2)
+			    return dest - first;
+
+		    *dest = *start2;
+		}
+	    }
+	}
+
+	while(*start2 == m) 
+	{
+	    if(unlikely(++start2 == end2))
+	    {
+		while(true) 
+		{
+		    for(; *start1 == *dest; ++start1)
+			if(start1 == end1)
+			    return dest - first;
+
+		    *dest = *start1;
+		}
+	    }
+	}
+    }
+}
+
+static void __Ht_MBT_AccArray_Full(__Ht_MBT_Acc_info_t* tp) 
+{
+    /* Here is where the magic happens.  
+
+       The first array is full, so now we need to find a place to store the
+       rest.
+
+       If the other array is empty, then sort and swap things out.  
+
+       The other array is always sorted.
+
+       If the other array is full, then merge both into a new array and 
+
+    */
+
+    if(tp->size == tp->alloc_size) 
+    {
+	assert(tp->flex_point != 0);
+
+	size_t t1_top_size = (tp->flex_point + 
+			      __Ht_MBT_AccArray SortUnique(
+				  tp->acc_array + tp->flex_point, 
+				  tp->acc_array + tp->size));
+	
+	if(tp->auxillary_array == NULL) 
+	{
+	    tp->auxillary_array = tp->acc_array;
+	    tp->auxillary_array_flex_point = tp->flex_point;
+	    tp->auxillary_array_size = t1_top_size;
+	    
+	    /* Estimate what's needed to hold what's left, based on current
+	     * rates. */
+
+	    tp->alloc_size = __Ht_MBT_AccArray_New_Size(tp);
+	    tp->acc_array = (markertype*)malloc(t1_top_size * sizeof(markertype));
+	    CHECK_MALLOC(tp->acc_array);
+	    tp->size = t1_top_size / 2;
+	} 
+	else
+	{
+	    /* Now, got to do 2 2-way merges to a new auxillary array, which
+	       becomes the new auxillary array. */
+
+	    size_t aux_size = t1_top_size + tp->auxillary_array_size;
+	    markertype *aux = (markertype*)malloc( aux_size * sizeof(markertype) );
+	    CHECK_MALLOC(aux);
+
+	    size_t flex_pt = __Ht_MBT_AccArray_MergeUnique(
+		tp->acc_array, tp->acc_array + tp->flex_pt,
+		tp->acc_array + tp->flex_pt, tp->acc_array + t1_top_size,
+		aux);
+
+	    size_t top_size = flex_pt + __Ht_MBT_AccArray_MergeUnique(
+		tp->auxillary_array, tp->auxillary_array + tp->auxillary_array_flex_point,
+		tp->auxillary_array + tp->auxillary_array_flex_point,
+		tp->auxillary_array + tp->auxillary_array_size,
+		aux + flex_pt);
+	    
+	    free(tp->auxillary_array);
+
+	    tp->auxillary_array = aux;
+	    tp->auxillary_array_flex_point = flex_pt;
+	    tp->auxillary_array_size = top_size;
+
+	    size_t new_req_estimate = __Ht_MBT_AccArray_New_Size(tp);
+
+	    if(new_req_estimate > 3*tp->alloc_size / 2) {
+		free(tp->acc_array);
+		tp->alloc_size = new_req_estimate;
+		tp->acc_array = (markertype*)malloc(tp->alloc_size * sizeof(markertype) );
+	    }
+
+	    tp->size = tp->alloc_size / 2;
+	    tp->pos = 0;
+	    tp->flex_pt = 0;
+	}
+    } 
+    else 
+    {
+	tp->pos = (tp->flex_point = 
+		   __Ht_MBT_AccArray_SortUnique(tp->acc_array, tp->acc_array + tp->size));
+	tp->size = tp->top_size;
+    }
+}
+
+static inline void __Ht_MBT_AccArray_AppendValue(struct __Ht_MBT_Acc_info_t* tp, markertype m) 
+{
+    assert(tp->pos < tp->size);
+
+    tp->acc_array[tp->pos_1++] = m;
+    ++tp->key_count;
+
+    if(unlikely(tp->pos == tp->size) )
+	__Ht_MBT_AccArray_Full(tp);
+}
+
+static void __Ht_MBT_AccArray_Done(struct __Ht_MBT_Acc_info_t* tp) 
+{
+    // Okay, now we just need to collapse the two arrays down to one big one
+
+    if(tp->flex_point != 0) 
+    {
+	assert(tp->size == tp->top_size);
+	
+	markertype *buffer = (markertype *) malloc(sizeof(markertype) * tp->pos);
+	
+	size_t n =__Ht_MBT_MergeUnique(tp->acc_array, tp->acc_array + tp->flex_point,
+				       tp->acc_array + tp->flex_point, tp->acc_array + tp->pos,
+				       buffer);
+
+	free(tp->acc_array);
+	tp->acc_array = buffer;
+	tp->top_size = tp->size = tp->pos = n;
+    }
+
+    if(tp->auxillary_array != NULL) 
+    {
+
+	if(likely(tp->auxillary_array_flex_point != 0) ) 
+	{
+	    markertype *buffer = (markertype *) malloc(
+		sizeof(markertype) * tp->auxillary_array_size);    
+
+	    CHECK_MALLOC(buffer); 
+	
+	    markertype *a = tp->auxillary_array;
+
+	    size_t n =__Ht_MBT_AccArray_MergeUnique(a, a + tp->auxillary_array_flex_point,
+						    a + tp->auxillary_array_flex_point,
+						    a + tp->auxillary_array_size,
+						    buffer);
+
+	    free(tp->auxillary_array);
+	    tp->auxillary_array = buffer;
+	    tp->auxillary_array_size = n; /* All we use later. */
+	}
+    
+	markertype *buffer = (markertype *) malloc(sizeof(markertype) 
+						   * (tp->pos + tp->auxillary_array_size));
+
+	size_t n =__Ht_MBT_AccArray_MergeUnique(
+	    tp->acc_array, tp->acc_array + tp->pos,
+	    tp->auxillary_array, tp->auxillary_array + tp->auxillary_array_size,
+	    buffer);
+
+	tp->acc_array = buffer;
+	tp->top_size = tp->size = tp->pos = n;
+    }
+
+    tp->auxillary_array = NULL;
+    tp->auxillary_array_size = 0;
+    tp->auxillary_array_flex_point = 0;
+}
+
+
+static void _Ht_MBT_Init(HashTable *ht) 
+{
+    if(unlikely(Ht_SIZE(ht) == 0))
+	return;
+
+    assert(ht->marker_btree == NULL);
+
+    /* First, need to get a complete set of all the marker values in the table.
+     * This is a little tricky to do quickly. The following gaurantees pretty
+     * good bounds. */
+    struct __Ht_MBT_Acc_info_t t;
+    __Ht_MBT_AccArray_Init(&t, ht);
+    
+    // Init the iterator
+    _HashTableInternalIterator hti;
+    _Hti_INIT(ht, &hti);
+    HashObject *h = NULL;
+
+    HashObject *h_list = (HashObject*)malloc(sizeof(HashObject*) * Ht_SIZE(ht));
+    size_t nh = 0;
+
+    while(_Hti_NEXT(&h, &hti))
+    {
+	/* We are always adding things to the acc_array_1.  We may swap some things. */
+	markerinfo *mi;
+
+	if( (mi = H_Mi(h)) == NULL) 
+	    continue;
+		
+	assert(nh < Ht_SIZE(ht));
+	h_list[nh++] = h;
+
+	/* It's valid, run with it. */
+	MarkerIterator *mii = Mii_New(mi);
+	MarkerRange mr;
+		
+	while(Mii_NEXT(&mr, mii)) 
+	{
+	    __Ht_MBT_AccArray_AppendValue(&t, mr.start);
+	    __Ht_MBT_AccArray_AppendValue(&t, mr.end);
+	}
+	
+	Mii_Delete(mii);
+	__Ht_MBT_AccArray_Done(&t);
+    }
+    
+    /* Now, everything is in the acc_array of this struct, sorted and unique. */
+    if(unlikely(t.size == 0) )
+    {
+	free(t.acc_array);
+	free(h_list);
+	return;
+    }
+
+    /* Get the full size. */
+    size_t level_size = t.size + ((t.acc_array[t.size - 1] == MARKER_PLUS_INFTY) ? 0 : 1);
+    size_t tree_size = level_size;
+    unsigned int n_levels = 1;
+
+    size_t initial_size = level_size;
+
+    while(true)
+    {
+	/* Tacking +infty on to the end of each one, hence the +1.  Normally, to
+	 * round up, we would add (_HT_MBT_LEVEL_DISECT_FACTOR -1), but we want
+	 * to handel the one we're tacking on separately, hence -2. */
+
+	level_size = (((level_size + (_HT_MBT_LEVEL_DISECT_FACTOR - 2) ) 
+		       >> _HT_MBT_LEVEL_LOG2_DISECT_FACTOR) 
+		      + 1);
+
+	if(level_size < 3*_HT_MBT_LEVEL_DISECT_FACTOR/2) 
+	    break;
+
+	tree_size += level_size;
+	++n_levels;
+
+	if(unlikely(n_levels == _HT_MBT_MAX_LEVELS)) 
+	    break;
+    }
+
+    _HT_MarkerBTree* bt = ht-> Mp_New_HT_MarkerBTree();
+    bt->size = initial_size;
+    bt->top_level = n_levels - 1;
+    bt->levels[0] = (_HT_MBT_Node *) malloc(tree_size * sizeof(_HT_MBT_Node));
+
+    bt->levels[bt->top_level] = (bt->levels[0] + (tree_size - initial_size)
+
+
+    /* Now, go through all the hash objects we tracked above and insert them in
+     * the tree. */
+
+
+    free(t.acc_array);
+    free(h_list);
+}
+
+
 
 /************************************************************
  *

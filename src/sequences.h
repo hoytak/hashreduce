@@ -12,7 +12,7 @@
 #define _REF_COUNT_OUT_true(x)  O_DECREF(x)
 
 #define DECLARE_NEW_SEQUENCE_OBJECT(name, base_type, base_type_items,	\
-				    item_type, abbreviation, count, do_ref_counting) \
+				    item_type, abbreviation, count, do_ref_counting, item_copyable) \
     									\
     typedef struct __##name##_Node_t {					\
 	MEMORY_POOL_ITEMS;						\

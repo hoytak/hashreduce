@@ -73,6 +73,7 @@ typedef struct {
 									\
     a2[0] = array;							\
     a2[1] = temp? temp : (type_t*)malloc(sizeof(type_t) * n);		\
+    CHECK_MALLOC(a2[1]);						\
     for (curr = 0, shift = 0; (1ul<<shift) < n; ++shift) {		\
       a = a2[curr]; b = a2[1-curr];					\
       if (shift == 0) {							\
@@ -147,7 +148,7 @@ typedef struct {
 	swap_tmp = *j; *j = *(j-1); *(j-1) = swap_tmp;			\
       }									\
   }									\
-  void ks_combsort_##name(size_t n, type_t a[])				\
+  static void ks_combsort_##name(size_t n, type_t a[])			\
   {									\
     const double shrink_factor = 1.2473309501039786540366528676643;	\
     int do_swap;							\
@@ -169,7 +170,7 @@ typedef struct {
     } while (do_swap || gap > 2);					\
     if (gap != 1) __ks_insertsort_##name(a, a + n);			\
   }									\
-  void ks_introsort_##name(size_t n, type_t a[])			\
+  static void ks_introsort_##name(size_t n, type_t a[])			\
   {									\
     int d;								\
     ks_isort_stack_t *top, *stack;					\
@@ -183,6 +184,7 @@ typedef struct {
     }									\
     for (d = 2; 1ul<<d < n; ++d);					\
     stack = (ks_isort_stack_t*)malloc(sizeof(ks_isort_stack_t) * ((sizeof(size_t)*d)+2)); \
+    CHECK_MALLOC(stack);						\
     top = stack; s = a; t = a + (n-1); d <<= 1;				\
     while (1) {								\
       if (s < t) {							\
@@ -222,7 +224,7 @@ typedef struct {
   }									\
   /* This function is adapted from: http://ndevilla.free.fr/median/ */	\
   /* 0 <= kk < n */							\
-  type_t ks_ksmall_##name(size_t n, type_t arr[], size_t kk)		\
+  static type_t ks_ksmall_##name(size_t n, type_t arr[], size_t kk)	\
   {									\
     type_t *low, *high, *k, *ll, *hh, *mid;				\
     low = arr; high = arr + n - 1; k = arr + kk;			\

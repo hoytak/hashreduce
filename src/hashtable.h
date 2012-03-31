@@ -117,6 +117,28 @@ typedef struct _HT_MSL_NodeStack_t {
     bool is_travel_node;
 } _HT_MSL_NodeStack;
 
+
+/**************************************************
+ * The non-dynamic marker skip list; this time more of a B-Tree.
+ **************************************************/
+
+#define _HT_MBT_LEVEL_LOG2_DISECT_FACTOR 5
+#define _HT_MBT_LEVEL_DISECT_FACTOR      (1 << _HT_MBT_LEVEL_LOG2_DISECT_FACTOR)
+#define _HT_MBT_LEVEL_DISECT_MASK        (_HT_MBT_LEVEL_DISECT_FACTOR - 1)
+#define _HT_MBT_MAX_LEVELS               16
+
+typedef struct _HT_MBT_Node_t {
+  markertype marker;
+  HashKey hk;
+} _HT_MBT_Node;
+
+typedef struct _HT_MarkerBTree_t {
+  MEMORY_POOL_ITEMS;
+  size_t size;
+  unsigned int top_level;
+  struct _HT_MBT_Node_t *levels[_HT_MBT_MAX_LEVELS];
+} _HT_MarkerBTree;
+
 /*************************************************
  * The hash table structure and various wrappers.
  **************************************************/
@@ -134,6 +156,7 @@ typedef struct {
 
     /* The marker skip list; may be null. */
     _HT_MarkerSkipList *marker_sl;
+    _HT_MarkerBTree *marker_btree;
 } HashTable;
 
 DECLARE_OBJECT(HashTable);
