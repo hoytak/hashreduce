@@ -1405,7 +1405,7 @@ static inline void _Ht_MSL_DeleteKey(HashTable *ht, HashObject *h)
     }
 }
 
-void _Ht_MSL_Init(HashTable *ht)
+static void _Ht_MSL_Init(HashTable *ht)
 {
     _HT_MarkerSkipList *msl = ht->marker_sl;
     assert(msl == NULL);
@@ -1441,7 +1441,7 @@ void _Ht_MSL_Init(HashTable *ht)
 }
 
 /**** needed routines that interface with the hash object stuff. ****/
-void _Ht_MSL_Drop(HashTable *ht)
+static void _Ht_MSL_Drop(HashTable *ht)
 {
     /* Drops the current msl if needed. */
 
@@ -1710,6 +1710,8 @@ static void __Ht_MBT_AccArray_Done(struct __Ht_MBT_Acc_info_t* tp)
     {
 	assert(tp->size == tp->top_size);
 	
+	__Ht_MBT_AccArray_SortUnique(tp->alloc_size + tp->flex_point, tp->alloc_size + tp->pos);
+
 	markertype *buffer = (markertype *) malloc(sizeof(markertype) * tp->pos);
 	
 	size_t n =__Ht_MBT_MergeUnique(tp->acc_array, tp->acc_array + tp->flex_point,
@@ -1720,10 +1722,13 @@ static void __Ht_MBT_AccArray_Done(struct __Ht_MBT_Acc_info_t* tp)
 	tp->acc_array = buffer;
 	tp->top_size = tp->size = tp->pos = n;
     }
+    else
+    {
+	__Ht_MBT_AccArray_SortUnique(tp->alloc_size, tp->alloc_size + tp->pos);
+    }
 
     if(tp->auxillary_array != NULL) 
     {
-
 	if(likely(tp->auxillary_array_flex_point != 0) ) 
 	{
 	    markertype *buffer = (markertype *) malloc(
@@ -1758,7 +1763,14 @@ static void __Ht_MBT_AccArray_Done(struct __Ht_MBT_Acc_info_t* tp)
     tp->auxillary_array = NULL;
     tp->auxillary_array_size = 0;
     tp->auxillary_array_flex_point = 0;
+
+#ifndef NDEBUG
+    size_t i;
+    for(i = 1; i < tp->size; ++i) 
+	assert(tp->acc_array[i] > tp->acc_array[i - 1]);
+#endif
 }
+
 
 
 static void _Ht_MBT_Init(HashTable *ht) 
@@ -1785,9 +1797,9 @@ static void _Ht_MBT_Init(HashTable *ht)
     while(_Hti_NEXT(&h, &hti))
     {
 	/* We are always adding things to the acc_array_1.  We may swap some things. */
-	markerinfo *mi;
+	markerinfo *mi = H_Mi(h);
 
-	if( (mi = H_Mi(h)) == NULL) 
+	if(Mi_ISEMPTY(mi))
 	    continue;
 		
 	assert(nh < Ht_SIZE(ht));
@@ -1804,23 +1816,28 @@ static void _Ht_MBT_Init(HashTable *ht)
 	}
 	
 	Mii_Delete(mii);
-	__Ht_MBT_AccArray_Done(&t);
     }
-    
+
     /* Now, everything is in the acc_array of this struct, sorted and unique. */
-    if(unlikely(t.size == 0) )
+    if(unlikely(nh == 0) )
     {
 	free(t.acc_array);
 	free(h_list);
 	return;
     }
 
+    __Ht_MBT_AccArray_AppendValue(&t, MARKER_MINUS_INFTY);
+    __Ht_MBT_AccArray_AppendValue(&t, MARKER_PLUS_INFTY);
+
+    __Ht_MBT_AccArray_Done(&t);
+
     /* Get the full size. */
-    size_t level_size = t.size + ((t.acc_array[t.size - 1] == MARKER_PLUS_INFTY) ? 0 : 1);
-    size_t tree_size = level_size;
+    size_t level_sizes[_HT_MBT_MAX_LEVELS];
+
+    level_sizes[0] = t.size;
     unsigned int n_levels = 1;
 
-    size_t initial_size = level_size;
+    size_t tree_size = level_sizes[0];
 
     while(true)
     {
@@ -1828,30 +1845,66 @@ static void _Ht_MBT_Init(HashTable *ht)
 	 * round up, we would add (_HT_MBT_LEVEL_DISECT_FACTOR -1), but we want
 	 * to handel the one we're tacking on separately, hence -2. */
 
-	level_size = (((level_size + (_HT_MBT_LEVEL_DISECT_FACTOR - 2) ) 
-		       >> _HT_MBT_LEVEL_LOG2_DISECT_FACTOR) 
-		      + 1);
+      level_sizes[n_levels] = (((level_sizes[n_levels-1] 
+				 + (_HT_MBT_LEVEL_DISECT_FACTOR - 2) ) 
+				>> _HT_MBT_LEVEL_LOG2_DISECT_FACTOR) 
+			       + 1);
 
-	if(level_size < 3*_HT_MBT_LEVEL_DISECT_FACTOR/2) 
-	    break;
+      if(level_sizes[n_levels] < 3*_HT_MBT_LEVEL_DISECT_FACTOR/2) 
+	break;
 
-	tree_size += level_size;
-	++n_levels;
+      tree_size += level_sizes[n_levels];
+      ++n_levels;
 
 	if(unlikely(n_levels == _HT_MBT_MAX_LEVELS)) 
 	    break;
     }
 
-    _HT_MarkerBTree* bt = ht-> Mp_New_HT_MarkerBTree();
+    _HT_MarkerBTree* bt = ht->marker_btree = Mp_New_HT_MarkerBTree();
     bt->size = initial_size;
     bt->top_level = n_levels - 1;
-    bt->levels[0] = (_HT_MBT_Node *) malloc(tree_size * sizeof(_HT_MBT_Node));
+    bt->levels[0] = (_HT_MBT_Node *) calloc(tree_size * sizeof(_HT_MBT_Node));
 
-    bt->levels[bt->top_level] = (bt->levels[0] + (tree_size - initial_size)
+    unsigned int level;
+    size_t i;
+    size_t pos = level_sizes[bt->top_level];
 
+    for(level = 1; level <= bt->top_level; ++level) {
+      bt->levels[level] = bt->levels[0] + pos;
+      pos += level_sizes[bt->top_level - level];
+    }
+
+    assert(pos == tree_size);
+
+    /* Now put in the marker values in the base of the array. */
+    for(i = 0; i < t.size; ++i)
+	(bt->levels[top_level] + i)->marker = t.acc_array[i];
+
+    assert( (bt->levels[top_level] + t.size - 1)->marker == MARKER_PLUS_INFTY);
+
+    /* Now fill in the rest. */
+    for(level = 1; level <= bt->top_level; ++level) 
+    {
+	size_t step = _HT_MBT_LEVEL_DISECT_FACTOR * level;
+
+	for(i = 0; i < level_sizes[level] - 1; ++i)
+	    (bt->levels[bt->top_level - level] + i)->marker = t.acc_array[i*step];
+	
+	(bt->levels[bt->top_level - level] + level_sizes[level] - 1)->marker = MARKER_PLUS_INFTY;
+    }
 
     /* Now, go through all the hash objects we tracked above and insert them in
      * the tree. */
+    _HT_MBT_Node* level_iterators[_HT_MBT_MAX_LEVELS];
+
+    for(i = 0; i < nh; ++i) 
+    {
+	for(level = 0; level <= bt->top_level; ++level)
+	    level_iterators[i] = bt->levels[level];
+	
+	HERE 
+
+    }
 
 
     free(t.acc_array);
