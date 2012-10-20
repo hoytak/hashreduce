@@ -846,6 +846,126 @@ void IBDGraphEquivalences_InplaceSort(IBDGraphEquivalences* ige)
     }
 }
 	
+/********************************************************************************
+ *
+ *  IBD Graphs Location Equivalences
+ *  
+ *
+ ********************************************************************************/
+
+DEFINE_NEW_SEQUENCE_OBJECT(IBDGraphLocationList, HashObject, HASHOBJECT_ITEMS,
+			   IBDGraphLocation, Igll, 8, false);
+
+
+void _IBDGraphLocationEquivalences_Destroy(IBDGraphLocationEquivalences * ibdle)
+{
+    O_DECREF(ibdle->graphs);
+
+    free(ibdle->location_lists[0]);
+    free(ibdle->location_lists);
+}
+
+DEFINE_OBJECT(
+    /* Name. */     IBDGraphLocationEquivalences, 
+    /* BaseType */  Object,
+    /* construct */ NULL,
+    /* delete */    _IBDGraphLocationEquivalences_Destroy);
+
+/****************************************
+ * Okay now for the real functions
+ ****************************************/ 
+
+IBDGraphLocationEquivalences* NewIBDGraphLocationEquivalences(IBDGraphList *igl)
+{
+    IBDGraphLocationEquivalences *loc_eq = ALLOCATEIBDGraphLocationEquivalences();
+    loc_eq->graphs = igl;
+    O_INCREF(loc_eq->graphs);
+    
+
+    /* Now populate the lookup tables. */
+
+    IBDGraphLocation loc;
+    IBDGraph *g;
+    
+    IBDGraphListIterator gli;
+    
+    HashTable *le_ht = NewHashTable();
+
+    size_t n_locs = 0;
+
+    Igli_INIT(igl, &gli);
+
+    while(Igli_NEXT(&g, &gli)) {
+	IBDGraph_Refresh(g);
+	
+	HashTableMarkerIterator* htmi = Htmi_New(g->graph_hashes);
+	HashValidityItem hvi;
+
+	while(Htmi_NEXT(&hvi, htmi)) {
+
+	    HashObject *h = Ht_ViewByKey(le_ht, hvi.hk);
+
+	    if(h == NULL) {
+		IBDGraphLocationList *igll_t = NewIBDGraphLocationList();
+		Hf_COPY_FROM_KEY(igll_t, &hvi.hk);
+		h = O_Cast(HashObject, igll_t);
+		Ht_Give(le_ht, h);
+	    }
+
+	    IBDGraphLocationList *igll = O_Cast(IBDGraphLocationList, h);
+
+	    IBDGraphLocation loc;
+	    loc.graph = g;
+	    loc.start = hvi.start;
+	    loc.end = hvi.end;
+
+	    Igll_Append(igll, loc);
+	    ++n_locs;
+	}
+
+	Htmi_Finish(htmi);
+    }
+
+    size_t n_classes = loc_eq->n_equivalences = Ht_SIZE(le_ht);
+
+    /* Go through the groups in the hash table. */
+    HashTableIterator* hti = Hti_New(le_ht);
+    IBDGraphLocationList *igll;
+
+    IBDGraphLocation *loc_v = (IBDGraphLocation*) malloc(sizeof(IBDGraphLocation) * n_locs);
+
+    loc_eq->location_lists = (IBDGraphLocation**) malloc(sizeof(IBDGraphLocation*) * (n_classes + 1));
+
+    loc_eq->location_lists[0] = loc_v;
+
+    size_t class_index = 0;
+
+    while(Hti_NEXT( (HashObject**)(&igll), hti)) {
+	
+	assert(class_index < n_classes);
+	loc_eq->location_lists[class_index] = loc_v;
+
+	IBDGraphLocationListIterator *lli = Iglli_New(igll);
+
+	while(Iglli_NEXT(loc_v, lli)) {
+	    O_INCREF(loc_v->graph);
+	    ++loc_v;
+	}
+
+	Iglli_Finish(lli);
+
+	++class_index;
+    }
+
+    loc_eq->location_lists[class_index] = loc_v;
+
+    Hti_Delete(hti);
+    O_DECREF(le_ht);
+
+    return loc_eq;
+}
+
+
 
 void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige)
 {
@@ -858,5 +978,24 @@ void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige)
 	    printf("%ld, ", ige->classes[i].graphs[j]->id);
 
 	printf("%ld\n", ige->classes[i].graphs[j]->id);
+    }
+}
+
+void IBDGraphLocationEquivalences_Print(IBDGraphLocationEquivalences* ibdle)
+{
+    size_t i, j;
+
+    for(i = 0; i < IBDLocEq_NumClasses(ibdle); ++i) {
+	printf("%ld\t : ", i);
+	
+	for(j = 0; j < IBDLocEq_ClassSize(ibdle, i); ++j) {
+
+	    printf("(%ld:%ld-%ld) ", 
+		   IBDLocEq_ViewItem(ibdle, i, j)->graph->id,
+		   IBDLocEq_ViewItem(ibdle, i, j)->start, 
+		   IBDLocEq_ViewItem(ibdle, i, j)->end);
+	}
+
+	printf("\n");
     }
 }

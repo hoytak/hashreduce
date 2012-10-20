@@ -84,7 +84,8 @@ int main(int argc, char **argv)
 	printf("Options:\t-m <int>\tPrints equivalent graphs at marker <>\n");
 	printf("\t\t-r <int> <int>\tPrints graphs same over range <> to <>\n");
 	printf("\t\t-s <int> <int>\tPrints validity range of graph around marker\n");
-	printf("\t\t-a <int>\tPrints entire validity range of graph\n\n");
+	printf("\t\t-a <int>\tPrints entire validity range of graph\n");
+	printf("\t\t-e Prints equivalence classes at the resolution of the marker.\n\n");
 	return 0;
     }
 
@@ -110,6 +111,7 @@ int main(int argc, char **argv)
 	    printf("\t\t-r <int> <int>\tPrints graphs same over range <> to <>\n");
 	    printf("\t\t-s <int> <int>\tPrints invariance range of graph at marker.\n");
 	    printf("\t\t-v <int> <int>\tPrints entire invariance set of graph at marker.\n\n");
+	    printf("\t\t-e Prints equivalence classes at the resolution of the marker.\n\n");
 	    break;
 
 	case 'm':
@@ -201,7 +203,7 @@ int main(int argc, char **argv)
 	case 'a':
 	    if(argc != 5) 
 	    {
-		printf("\nERROR: Incorrect number of arguments for the -s flag.\n");
+		printf("\nERROR: Incorrect number of arguments for the -a flag.\n");
 		printf("Use the -h or --help flag to see options and usage.\n\n");
 		exit(1);
 	    }
@@ -233,6 +235,34 @@ int main(int argc, char **argv)
 	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
 	    printf("Calculating everything else took %.2lf seconds.", elapsed2/CLOCKS_PER_SEC);
 	    
+	    break;
+
+	case 'e':
+	    if(argc != 3) 
+	    {
+		printf("\nERROR: Incorrect number of arguments for the -e flag.\n");
+		printf("Use the -h or --help flag to see options and usage.\n\n");
+		exit(1);
+	    }
+
+	    // get graph number and specified marker
+	    createIBDGraphs(argv[1], ibd_graphs);
+	    elapsed1 = (double)clock() - start;
+
+	    IBDGraphLocationEquivalences* igeq = NewIBDGraphLocationEquivalences(ibd_graphs);
+
+
+	    elapsed2 = (double)clock() - elapsed1;
+
+	    IBDGraphLocationEquivalences_Print(igeq);
+
+	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
+	    printf("Calculating everything else took %.2lf seconds.\n", elapsed2/CLOCKS_PER_SEC);
+	    printf("Grouped %ld locations into %ld equivalence classes.\n\n", 
+		   IBDLocEq_TotalSize(igeq), IBDLocEq_NumClasses(igeq));
+		
+	    O_DECREF(igeq);
+
 	    break;
 
 	default:

@@ -1668,6 +1668,20 @@ HashObject* Ht_Get(const HashTable *ht, const HashObject *hk)
     return ret;
 }
 
+HashObject* Ht_GetByKey(const HashTable *ht, HashKey hk)
+{
+    /* Returns the given key if it's present in the hash table; if it
+     * is not preset, NULL is returned. 
+     */
+    HashObject *ret = Ht_ViewByKey(ht, hk);
+
+    if(ret != NULL)
+	O_INCREF(ret);
+
+    return ret;
+}
+
+
 static inline void _Ht_Deletion_Bookkeeping(
     HashTable *ht, HashObject *h, const bool decref)
 {

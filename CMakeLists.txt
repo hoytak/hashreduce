@@ -37,8 +37,8 @@ include(CheckCCompilerFlag)
 ################################################################################
 # Check for compiler options
 
-set(CMAKE_C_FLAGS_DEBUG "-g3 -O1 -UNDEBUG -Wall")
-set(CMAKE_C_FLAGS_RELEASE "-g -O3 -DNDEBUG")
+set(CMAKE_C_FLAGS_DEBUG "-g3 -O1 -UNDEBUG -Wall -Wno-address")
+set(CMAKE_C_FLAGS_RELEASE "-g -O3 -DNDEBUG -Wno-address")
 
 if(ENABLE_CHECKS)
   set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DENABLE_CONSISTENCY_CHECKS")

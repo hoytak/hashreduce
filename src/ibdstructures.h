@@ -215,6 +215,74 @@ void IBDGraphEquivalences_InplaceSort(IBDGraphEquivalences* ige);
 /* prints output */
 void IBDGraphEquivalences_Print(IBDGraphEquivalences* ige);
 
+/********************************************************************************
+ *
+ *  Function to recycle computations; first creates a list of scores that
+ *
+ ********************************************************************************/
+
+typedef struct {
+    IBDGraph *graph;
+    markertype start, end;
+} IBDGraphLocation; 
+
+DECLARE_NEW_SEQUENCE_OBJECT(IBDGraphLocationList, HashObject, HASHOBJECT_ITEMS,
+			    IBDGraphLocation, Igll, 8, false);
+
+/* Note in this one, it's important that the hash table of location equivalences
+ * is not used outside this structure. */
+
+typedef struct {
+    OBJECT_ITEMS;
+    IBDGraphList *graphs;
+
+    IBDGraphLocation **location_lists;
+    size_t n_equivalences;
+
+} IBDGraphLocationEquivalences;
+
+DECLARE_OBJECT(IBDGraphLocationEquivalences);
+
+/********************************************************************************
+ * Builds a lookup table of all the places the graphs are the same.  This can
+ * then be used to fill out values of functions calculated on these graphs.
+ ********************************************************************************/
+
+IBDGraphLocationEquivalences* NewIBDGraphLocationEquivalences(IBDGraphList *igl);
+
+/* Returns the number of equivalence classes present in the graph list.
+ */
+
+inline size_t IBDLocEq_NumClasses(IBDGraphLocationEquivalences *ibdle)
+{
+    return ibdle->n_equivalences;
+}
+
+/* Returns the size of the specified class.
+ */
+
+size_t IBDLocEq_ClassSize(IBDGraphLocationEquivalences *ibdle, size_t class_index)
+{
+    assert(class_index < ibdle->n_equivalences);
+    return (ibdle->location_lists[class_index + 1] - ibdle->location_lists[class_index]);
+}
+
+size_t IBDLocEq_TotalSize(IBDGraphLocationEquivalences *ibdle)
+{
+    return (ibdle->location_lists[ibdle->n_equivalences] - ibdle->location_lists[0]);
+}
+
+IBDGraphLocation* IBDLocEq_ViewItem(IBDGraphLocationEquivalences *ibdle, size_t class_index, size_t item_index)
+{
+    assert(class_index < ibdle->n_equivalences);
+    assert(item_index < IBDLocEq_ClassSize(ibdle, class_index));
+    return &(ibdle->location_lists[class_index][item_index]);
+}
+
+
+
+void IBDGraphLocationEquivalences_Print(IBDGraphLocationEquivalences* ibdle);
+
 /************************************************************
  *
  *  Debug routines.

@@ -247,10 +247,7 @@ extern ObjectInfo O_GlobalObjectInfoStruct(NULLType);
 	ObjectType *obj = ALLOCATE##ObjectType();			\
 									\
 	if(construction_function != NULL)				\
-	{								\
-	    assert(O_GlobalObjectInfoStruct(ObjectType).construction_functio##n != NULL); \
 	    O_GlobalObjectInfoStruct(ObjectType).construction_functio##n(obj); \
-	}								\
 									\
 	return obj;							\
     }									\
