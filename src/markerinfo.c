@@ -467,6 +467,16 @@ bool Mi_IsEmpty(cmi_ptr mi)
     return Mi_ISEMPTY(mi);
 }
 
+const MarkerRange* Mi_AtIndex(cmi_ptr mi, size_t index)
+{
+    return Mi_AT_INDEX(mi, index);
+}
+
+size_t Mi_NumMarkerRanges(cmi_ptr mi)
+{
+    return Mi_NUM_MARKER_RANGES(mi);
+}
+
 /*****************************************
  *
  *  Set operations

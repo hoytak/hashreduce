@@ -125,6 +125,18 @@ mi_ptr Mi_SymmetricDifference(cmi_ptr mi1, cmi_ptr mi2);
 
 /*****************************************
  *
+ *  Ways to look at the marker range parameters by index
+ *
+ ****************************************/
+
+size_t Mi_NumMarkerRanges(cmi_ptr mi);
+static inline size_t Mi_NUM_MARKER_RANGES(cmi_ptr mi);
+
+const MarkerRange* Mi_AtIndex(cmi_ptr mi, size_t index);
+static inline const MarkerRange* Mi_AT_INDEX(cmi_ptr mi, size_t index);
+
+/*****************************************
+ *
  *  Debug routines
  *
  ****************************************/
@@ -151,6 +163,22 @@ static inline bool Mi_MINUS_INFTY_IS_VALID(cmi_ptr mi)
 	    (mi->num_array_ranges == 0 
 	     ? mi->r.start == MARKER_MINUS_INFTY 
 	     : mi->range_list[0].start == MARKER_MINUS_INFTY));
+}
+
+static inline size_t Mi_NUM_MARKER_RANGES(cmi_ptr mi) 
+{
+    return (Mi_ISEMPTY(mi) 
+	    ? 0
+	    : ((mi->num_array_ranges == 0) 
+	       ? 1 
+	       : mi->num_array_ranges));
+}
+
+static inline const MarkerRange* Mi_AT_INDEX(cmi_ptr mi, size_t index) 
+{
+    return ((mi->num_array_ranges == 0) 
+	    ? &(mi->r)
+	    : &(mi->range_list[index]));
 }
 
 static inline markertype Mi_Min(cmi_ptr mi)
