@@ -14,6 +14,17 @@
 #include "optimizations.h"
 #include "debugging.h"
 
+#ifndef HAVE__builtin_ctzl
+#ifdef __GNUC__
+#if __GNUC__ > 3
+
+#define HAVE__builtin_ctzl
+#define HAVE__builtin_clzl
+
+#endif
+#endif
+#endif
+
 typedef unsigned long int bitfield;
 
 #define bitsizeof(t) (8*sizeof(t))
@@ -53,7 +64,6 @@ static inline bool bitOff(bitfield bf, unsigned int bit)
 	assert(bitOn( (bf), (bit)));					\
 	(bf) -= LeftShift(1, (bit));					\
     } while(0)
-
 
 static inline int getFirstBitOn(bitfield bf)
 {

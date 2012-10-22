@@ -140,43 +140,6 @@ endif()
 if(BUILD_IBD)
 endif()
 
-########################################
-# Existance of __builtin_ctzl
-set(CMAKE_REQUIRED_FLAGS "${CMAKE_C_FLAGS}")
-CHECK_C_SOURCE_COMPILES("int main(int argc, char** argv){return __builtin_ctz(1);}" HAVE__builtin_ctz)
-
-if(HAVE__builtin_ctz)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE__builtin_ctz")
-  message("Builtin function __builtin_ctz found.")
-else()
-  message("Builtin function __builtin_ctz not found; using fallback.")
-endif()
-
-CHECK_C_SOURCE_COMPILES("int main(int argc, char** argv){return __builtin_ctzl(1);}" HAVE__builtin_ctzl)
-
-if(HAVE__builtin_ctzl)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE__builtin_ctzl")
-  message("Builtin function __builtin_ctzl found.")
-else()
-  message("Builtin function __builtin_ctzl not found; using fallback.")
-endif()
-
-CHECK_C_SOURCE_COMPILES("int main(int argc, char** argv){return __builtin_ctzll(1);}" HAVE__builtin_ctzll)
-if(HAVE__builtin_ctzl)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE__builtin_ctzll")
-  message("Builtin function __builtin_ctzll found.")
-else()
-  message("Builtin function __builtin_ctzll not found; using fallback.")
-endif()
-
-CHECK_C_SOURCE_COMPILES("int main(int argc, char** argv){return __builtin_clzl(1);}" HAVE__builtin_clzl)
-
-if(HAVE__builtin_clzl)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DHAVE__builtin_clzl")
-  message("Builtin function __builtin_clzl found.")
-else()
-  message("Builtin function __builtin_clzl not found; using fallback.")
-endif()
 
 ################################################################################
 
