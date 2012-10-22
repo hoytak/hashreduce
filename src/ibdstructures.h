@@ -253,7 +253,7 @@ IBDGraphLocationEquivalences* NewIBDGraphLocationEquivalences(IBDGraphList *igl)
 /* Returns the number of equivalence classes present in the graph list.
  */
 
-inline size_t IBDLocEq_NumClasses(IBDGraphLocationEquivalences *ibdle)
+static inline size_t IBDLocEq_NumClasses(IBDGraphLocationEquivalences *ibdle)
 {
     return ibdle->n_equivalences;
 }
@@ -261,18 +261,18 @@ inline size_t IBDLocEq_NumClasses(IBDGraphLocationEquivalences *ibdle)
 /* Returns the size of the specified class.
  */
 
-size_t IBDLocEq_ClassSize(IBDGraphLocationEquivalences *ibdle, size_t class_index)
+static inline size_t IBDLocEq_ClassSize(IBDGraphLocationEquivalences *ibdle, size_t class_index)
 {
     assert(class_index < ibdle->n_equivalences);
     return (ibdle->location_lists[class_index + 1] - ibdle->location_lists[class_index]);
 }
 
-size_t IBDLocEq_TotalSize(IBDGraphLocationEquivalences *ibdle)
+static inline size_t IBDLocEq_TotalSize(IBDGraphLocationEquivalences *ibdle)
 {
     return (ibdle->location_lists[ibdle->n_equivalences] - ibdle->location_lists[0]);
 }
 
-IBDGraphLocation* IBDLocEq_ViewItem(IBDGraphLocationEquivalences *ibdle, size_t class_index, size_t item_index)
+static inline IBDGraphLocation* IBDLocEq_ViewItem(IBDGraphLocationEquivalences *ibdle, size_t class_index, size_t item_index)
 {
     assert(class_index < ibdle->n_equivalences);
     assert(item_index < IBDLocEq_ClassSize(ibdle, class_index));
