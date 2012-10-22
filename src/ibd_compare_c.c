@@ -460,6 +460,11 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
     // opening file
     FILE *fp = fopen(file, "r");
 
+    if(fp == NULL) {
+	fprintf(stderr, "\nError!  File %s not found.  Aborting.\n\n", file);
+	exit(1);
+    }
+
     /* printf("Preparing graphs.\n\n"); */
 
     // Creating IBD graphs until file is empty
