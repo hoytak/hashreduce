@@ -446,6 +446,8 @@ static void _Hk_PopulateHKIntLookup()
     for(i = 0; i < HK_UNSIGNED_INT_LOOKUP_SIZE; ++i)
 	for(j = 0; j < H_NUM_32BIT_COMPONENTS; ++j)
 	    _hk_uint_lookup[i].hk32[j] = Mtr_Next(mts);
+
+    Mtr_Delete(mts);
 }
 
 inline void Hkf_FromUnsignedInt(hk_ptr dest_key, unsigned long x)

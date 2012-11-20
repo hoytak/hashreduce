@@ -70,6 +70,7 @@ typedef struct {
 
 static inline MTRandState* Mtr_New(uint32_t seed);
 static inline uint32_t Mtr_Next(MTRandState*);
+static inline void Mtr_Delete(MTRandState*);
 
 void _Mtr_next_state(MTRandState*);
 

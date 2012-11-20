@@ -411,7 +411,7 @@ DECLARE_OBJECT(Object);
 	    if(objp->_obj_type_info->delete_function != NULL)		\
 		(*(objp->_obj_type_info->delete_function))(objp);	\
 									\
-	    assert((*(objp->_obj_type_info->deallocate_function)) != NULL); \
+	    assert(objp->_obj_type_info->deallocate_function != NULL);	\
 	    (*(objp->_obj_type_info->deallocate_function))(objp);	\
 	}								\
     }while(0)

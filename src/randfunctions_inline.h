@@ -42,6 +42,11 @@ static inline uint32_t Mtr_Next(MTRandState* mts)
     return (uint32_t)y;
 }
 
+static inline void Mtr_Delete(MTRandState* mts) 
+{
+    free(mts);
+}
+
 static inline LCGState Lcg_New(uint32_t seed)
 {
     // Just make sure we don't have a weak seed with integer size truncations
