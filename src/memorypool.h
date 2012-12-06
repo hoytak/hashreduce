@@ -11,7 +11,7 @@
 #define MEMORY_POOL_ITEMS			\
     size_t _mpool_origin_index
 
-#define STATIC_MEMORY_POOL_VALUES {0,0,NULL,0}
+#define STATIC_MEMORY_POOL_VALUES {0,0,NULL,NULL}
 
 #define _DECLARE_MEMORY_POOL_BASE_DATASTRUCTS(Type)			\
 									\
@@ -24,7 +24,7 @@
 	size_t allocated_pages;						\
 	size_t first_page_with_free_spot;				\
 	_MP_Page_##Type *pages;						\
-	size_t candidate_page_for_deallocation;				\
+	Type *reserve_memblock;						\
     } MemoryPool_##Type;						
 
 #define _MP_MEM_POOL_STEP 8
@@ -47,12 +47,22 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 	_MP_Page_##Type *mpp = &(mp->pages[idx]);			\
 	size_t num = _MP_IndexMasterPage_Size(idx);			\
-	assert(mpp->memblock == NULL);					\
-	Type* ptr = (Type*)calloc(bitsizeof(bitfield)*num, sizeof(Type)); \
-	CHECK_MALLOC(ptr);						\
+	Type* ptr;							\
+	if(mp->reserve_memblock != NULL && idx > _MP_MEM_POOL_STEP)	\
+	{								\
+	    ptr = mp->reserve_memblock;					\
+	    mp->reserve_memblock = NULL;				\
+	}								\
+	else								\
+	{								\
+	    ptr = (Type*)calloc(bitsizeof(bitfield)*num, sizeof(Type)); \
+	    CHECK_MALLOC(ptr);						\
+	}								\
+									\
 	int i;								\
 	for(i = 0; i < num; ++i)					\
 	{								\
+	    assert( (mpp+i)->memblock == NULL);				\
 	    (mpp + i)->memblock = ptr + i*bitsizeof(bitfield);		\
 	    (mpp + i)->available_mask = ~((bitfield)0);			\
 	}								\
@@ -80,22 +90,28 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 	_MP_InitPages_##Type(0);					\
     }									\
 									\
-    static inline void _MP_ClearPages_##Type(size_t idx)		\
+    static inline Type* _MP_ClearPages_##Type(size_t idx)		\
     {									\
 	MemoryPool_##Type *mp = &_memorypool_##Type;			\
 									\
 	_MP_Page_##Type *mpp = &(mp->pages[idx]);			\
 	size_t num = _MP_IndexMasterPage_Size(idx);			\
-									\
+	Type* memblock = mpp->memblock;					\
 	assert(mpp->memblock != NULL);					\
 	assert(mpp->available_mask == ~((bitfield)0));			\
-	free(mpp->memblock);						\
-	size_t i;							\
+	size_t i, pos;							\
 	for(i = 0; i < num; ++i)					\
 	{								\
+	    if(true)							\
+	    {								\
+		for(pos = 0; pos < bitsizeof(bitfield); ++pos)		\
+		    assert(bitOn((mpp+i)->available_mask, pos));	\
+	    }								\
+									\
 	    (mpp + i)->available_mask = 0;				\
 	    (mpp + i)->memblock = NULL;					\
 	}								\
+	return memblock;						\
     }									\
 									\
     static void _MP_AdvancePagePointer_##Type()				\
@@ -187,23 +203,26 @@ static inline size_t _MP_IndexMasterPage_Size(size_t idx)
 									\
 	memset(obj, 0, sizeof(Type));					\
 									\
-	if(unlikely(_MP_IndexMasterPage(page_index) && ~(mpp->available_mask) == 0) ) \
+	if(unlikely(_MP_IndexMasterPage(page_index) && (~(mpp->available_mask)) == 0) ) \
 	{								\
 	    bool okay = true;						\
-	    size_t i;							\
-	    for(i = 1; i < _MP_IndexMasterPage_Size(page_index); ++i)	\
+	    int i;							\
+	    int num = _MP_IndexMasterPage_Size(page_index);		\
+									\
+	    for(i = 1; i < num; ++i)					\
 	    {								\
-		if(~((mpp + i)->available_mask) != 0)			\
+		if( (~((mpp + i)->available_mask)) != 0)		\
 		{okay = false; break; }					\
 	    }								\
 	    if(okay)							\
 	    {								\
-		size_t col_idx = mp->candidate_page_for_deallocation;	\
-									\
-		if(col_idx != page_index && (~(mp->pages[col_idx].available_mask)) == 0) \
-		    _MP_ClearPages_##Type(col_idx);			\
-									\
-		mp->candidate_page_for_deallocation = page_index;	\
+		Type* memblock = _MP_ClearPages_##Type(page_index);	\
+		if(page_index < _MP_MEM_POOL_STEP || mp->reserve_memblock != NULL) \
+		{							\
+		    free(memblock);					\
+		}							\
+		else							\
+		    mp->reserve_memblock = memblock;			\
 	    }								\
 	}								\
     }
