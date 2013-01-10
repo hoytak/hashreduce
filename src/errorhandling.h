@@ -48,7 +48,7 @@ void printError(error_code ecode, char *msg);
 	if(unlikely((condition)) )					\
 	{								\
 	    fprintf(stderr, "\nWARNING %s", m);				\
-	    fprintf(stderr, "\nTriggered in %s, function %s, line %d, %s", \
+	    fprintf(stderr, "\nTriggered in %s, function %s, line %d, %s\n", \
 		    __FILE__, __func__, __LINE__, #condition);		\
 	    fflush(stderr);						\
 	}								\

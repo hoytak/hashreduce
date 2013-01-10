@@ -52,12 +52,12 @@ int main(int argc, char **argv)
 
     double start = (double)clock();
 
-    int marker;
-    int lower = 0;
-    int upper = 0;
-    int graph = 0;
+    long marker;
+    long lower = 0;
+    long upper = 0;
+    long graph = 0;
 
-    int marker_loc[2];
+    long marker_loc[2];
 
     // char h[33];
 
@@ -305,7 +305,7 @@ int main(int argc, char **argv)
 
 static inline bool verifyKeyAndAdvanceStream(char* name, FILE* fp)
 {
-    int pos, r;
+    long pos, r;
 
     do{
 	r = fgetc(fp);
@@ -357,11 +357,11 @@ static inline bool getKeyFromFileStream(HashKey* key, char* name, FILE* fp)
     while(true)
     {
 	bool done = false, is_int = true;
-	int pos;
+	long pos;
 
 	for(pos = 0; pos < EDGE_NAME_BUFFER_SIZE; ++pos)
 	{
-	    int r;
+	    long r;
 
 	    do{
 		r = fgetc(fp);
@@ -432,14 +432,14 @@ static inline bool getKeyFromFileStream(HashKey* key, char* name, FILE* fp)
 static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 {
 
-    int i, j, k;
-    int ibd0;
-    int ibd1;
-    int changes;
-    int ibd;
-    int change_pos;
-    int cur_range_min = 0;
-    int mr_graph_min = 0;
+    long i, j, k;
+    long ibd0;
+    long ibd1;
+    long changes;
+    long ibd;
+    long change_pos;
+    long cur_range_min = 0;
+    long mr_graph_min = 0;
 
     IBDGraph *ibd_graph;
 
@@ -488,7 +488,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
     
     // running through connections, start by reading a line of input
     while (getKeyFromFileStream(&key, edge, fp) 
-	   && fscanf(fp, "%d %d %d", &ibd0, &ibd1, &changes) == 3)
+	   && fscanf(fp, "%ld %ld %ld", &ibd0, &ibd1, &changes) == 3)
     {
 	/* printf("Building graph %d\n", i); */
 	/* printf("Read %s %d %d %d\n", edge, ibd0, ibd1, changes); */
@@ -525,7 +525,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 	{
 	    for(k=0; k<changes; k++) // if there are changes, run through and update graph
 	    {
-		fscanf(fp, "%d %d", &change_pos, &ibd);
+		fscanf(fp, "%ld %ld", &change_pos, &ibd);
 		/* printf("  Changes %d %d\n", change_pos, ibd); */
 
 		/* H_ExtractHash(s, cur_node); */
@@ -544,7 +544,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 
 	/* Reading paired line to above */
 	
-	if (verifyKeyAndAdvanceStream(edge, fp) && fscanf(fp, "%d %d %d", &ibd0, &ibd1, &changes) == 3)
+	if (verifyKeyAndAdvanceStream(edge, fp) && fscanf(fp, "%ld %ld %ld", &ibd0, &ibd1, &changes) == 3)
 	{
 	    /* printf("Read %s %d %d %d\n", edge, ibd0, ibd1, changes); */
 
@@ -567,7 +567,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 	    {
 		for(k=0; k<changes; k++) // if there are changes, update graph
 		{
-		    fscanf(fp, "%d %d", &change_pos, &ibd);
+		    fscanf(fp, "%ld %ld", &change_pos, &ibd);
 		    /* printf("  Changes %d %d\n", change_pos, ibd); */
 		    
 		    /* H_ExtractHash(s, cur_node); */
