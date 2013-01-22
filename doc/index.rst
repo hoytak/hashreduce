@@ -5,22 +5,31 @@ HashReduce is a library for reducing dynamic structures into dynamic
 hash keys for the purpose of fast comparison, indexing, and testing
 operations.  In the targeted application (Identity-by-descent graphs
 for genetic pedigrees), it speeds up several operations by many orders
-of magnitude.  It is the code associated with my `tech report
-<http://www.stat.washington.edu/research/reports/2010/tr567.pdf>`_ on
-the subject, and is incorporated into the PANGAEA_ (Pedigree analysis
-for genetics) framework for computations on genetic pedigree graphs;
-if you intend to use this package for that purpose, download IBDgraph
-from the PANGAEA_ website.
+of magnitude.  It implements the operations described in the following
+two publications:
 
-To standardize with that package, it is written in C; one thing on my
-todo list is convert it to C++, which I think could make parts
-significantly faster (as the current version reimplements some data
-structures which are more optimized in C++).
+  - `Efficient Identification of Equivalences in Dynamic Graphs and Pedigree Structures. <http://www.stat.washington.edu/~hoytak/papers.html#efficient-identification-of-equivalences-in-dynamic-graphs-and-pedigree-structures>`_
 
-The documentation is a bit limited for general use at this point; I
-intend to change that as soon as I have time (sigh).  However, the
-code is well organized and the header files are well commented, so
-these should provide a decent reference.
+  - `Efficient Testing Operations on Dynamic Graph Structures using Strong Hash Functions. <http://www.stat.washington.edu/research/reports/2010/tr567.pdf>`_
+
+It is incorporated into the PANGAEA_ (Pedigree analysis for genetics)
+framework for computations on genetic pedigree graphs. 
+
+The documentation is a bit scattered for general use at this point; I
+intend to change that as soon as I have time (sigh).  There are,
+however, three places to start:
+
+  - The appendix in the first of the papers above describes the API
+    and functions implemented in the code.
+
+  - The header files have extensive comments to detail how they are
+    used. 
+
+  - Two files are good places to look for example code.
+    ibd_compare_c.c is the code for parsing and processing the IBD
+    graph files using the library.  It calls functions in
+    ibd_structures.{h,cpp}, which implement calls to the generic
+    interface.   These two illustrate the proper use of the code. 
 
 .. toctree::
     :maxdepth: 2
