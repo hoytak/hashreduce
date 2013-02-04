@@ -256,11 +256,12 @@ int main(int argc, char **argv)
 
 	    IBDGraphLocationEquivalences_Print(igeq);
 
-	    printf("\nCreating the IBD graphs took %.2lf seconds.\n", elapsed1/CLOCKS_PER_SEC);
+	    printf("\nCreating the %d IBD graphs took %.2lf seconds.\n", 
+		   Igl_Size(ibd_graphs), elapsed1/CLOCKS_PER_SEC);
 	    printf("Calculating everything else took %.2lf seconds.\n", elapsed2/CLOCKS_PER_SEC);
 	    printf("Grouped %ld locations into %ld equivalence classes.\n\n", 
 		   IBDLocEq_TotalSize(igeq), IBDLocEq_NumClasses(igeq));
-		
+	    
 	    O_DECREF(igeq);
 
 	    break;
