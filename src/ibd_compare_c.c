@@ -65,12 +65,12 @@ int main(int argc, char **argv)
 
     if(argc == 4)
     {
-	marker = atoi(argv[3]);
+	marker = atol(argv[3]);
     }
     if(argc == 5)
     {
-	lower = atoi(argv[3]);
-	upper = atoi(argv[4]);
+	lower = atol(argv[3]);
+	upper = atol(argv[4]);
 	graph = lower;
     }
 
@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 	case 'm':
 
 	    // get marker location
-	    marker_loc[0] = atoi(argv[3]);
+	    marker_loc[0] = atol(argv[3]);
 	    marker_loc[1] = -1;
 	    if(argc != 4)
 	    {
@@ -146,8 +146,8 @@ int main(int argc, char **argv)
 	    }
 
 	    // get range
-	    marker_loc[0] = atoi(argv[3]);
-	    marker_loc[1] = atoi(argv[4]) + 1;	    
+	    marker_loc[0] = atol(argv[3]);
+	    marker_loc[1] = atol(argv[4]) + 1;	    
 	    printf("\nTesting range from marker %d to %d\n\n", marker_loc[0], marker_loc[1]);
 	    createIBDGraphs(argv[1], ibd_graphs);
 
@@ -178,7 +178,7 @@ int main(int argc, char **argv)
 	    createIBDGraphs(argv[1], ibd_graphs);
 	    elapsed1 = (double)clock() - start;
 
-	    index = atoi(argv[3]) - 1;
+	    index = atol(argv[3]) - 1;
 	    if(index < 0 || index >= Igl_Size(ibd_graphs)) 
 	    {
 		printf("ERROR: Index %ld out of range, must be 1 <= index <= %ld.", index+1, Igl_Size(ibd_graphs));
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
 	    createIBDGraphs(argv[1], ibd_graphs);
 	    elapsed1 = (double)clock() - start;
 
-	    index = atoi(argv[3]) - 1;
+	    index = atol(argv[3]) - 1;
 	    if(index < 0 || index >= Igl_Size(ibd_graphs)) 
 	    {
 		printf("ERROR: Index %ld out of range, must be 1 <= index <= %ld.", index+1, Igl_Size(ibd_graphs));
