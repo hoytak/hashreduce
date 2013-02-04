@@ -2,11 +2,8 @@ Download
 ========
 
 I maintain HashReduce as a github_ repository online at
-http://github.com/hoytak/hashreduce.  
-
-Note that if you intend to use this library for pedigree analysis, you
-might want to use the PANGAEA_ version, IBDgraph_, as it also contains
-parsers for reading MORGAN's IBD (identity by descent) graph files.
+http://github.com/hoytak/hashreduce.  It contains a script to work
+with IBD graphs as used in PANGAEA_.  
 
 A source tarball can be downloaded at
 http://github.com/hoytak/hashreduce/tarball/master.  Note that this
