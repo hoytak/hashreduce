@@ -43,7 +43,7 @@
 
 
 // function declarations
-static void createIBDGraphs(char* file, IBDGraphList *ibd_graphs);
+static long createIBDGraphs(char* file, IBDGraphList *ibd_graphs);
 /* static int checkEdgeList(int edge, int NUM_EDGES, int edge_list[]); */
 
 
@@ -74,6 +74,8 @@ int main(int argc, char **argv)
 	graph = lower;
     }
 
+    IBDGraphLocationEquivalences* igeq;
+
     char help1[] = "-h";
     char help2[] = "--help";
     if(argc == 1 || strcmp(argv[1], help1) == 0 || strcmp(argv[1], help2) == 0)
@@ -94,7 +96,7 @@ int main(int argc, char **argv)
 
     IBDGraphEquivalences *ibd_equivalences;
 
-    long index;
+    long index, n_individuals;
     markertype m, ml, mu;
     IBDGraph *g;
     mi_ptr invariant_set;
@@ -125,7 +127,7 @@ int main(int argc, char **argv)
 		printf("Use the -h or --help flag to see options and usage.\n\n");
 		exit(1);
 	    }
-	    printf("\nTesting at specified marker location %d.\n\n", marker_loc[0]);
+	    printf("\nTesting at specified marker location %ld.\n\n", marker_loc[0]);
 	    createIBDGraphs(argv[1], ibd_graphs);
 	    elapsed1 = (double)clock() - start;
 	    ibd_equivalences = IBDGraphEquivalenceClassesAtMarker(ibd_graphs, marker_loc[0]);
@@ -148,7 +150,7 @@ int main(int argc, char **argv)
 	    // get range
 	    marker_loc[0] = atol(argv[3]);
 	    marker_loc[1] = atol(argv[4]) + 1;	    
-	    printf("\nTesting range from marker %d to %d\n\n", marker_loc[0], marker_loc[1]);
+	    printf("\nTesting range from marker %ld to %ld\n\n", marker_loc[0], marker_loc[1]);
 	    createIBDGraphs(argv[1], ibd_graphs);
 
 	    elapsed1 = (double)clock() - start;
@@ -249,19 +251,47 @@ int main(int argc, char **argv)
 	    createIBDGraphs(argv[1], ibd_graphs);
 	    elapsed1 = (double)clock() - start;
 
-	    IBDGraphLocationEquivalences* igeq = NewIBDGraphLocationEquivalences(ibd_graphs);
+	    igeq = NewIBDGraphLocationEquivalences(ibd_graphs);
 
 
 	    elapsed2 = (double)clock() - elapsed1;
 
 	    IBDGraphLocationEquivalences_Print(igeq);
 
-	    printf("\nCreating the %d IBD graphs took %.2lf seconds.\n", 
+	    printf("\nCreating the %ld IBD graphs took %.2lf seconds.\n", 
 		   Igl_Size(ibd_graphs), elapsed1/CLOCKS_PER_SEC);
 	    printf("Calculating everything else took %.2lf seconds.\n", elapsed2/CLOCKS_PER_SEC);
 	    printf("Grouped %ld locations into %ld equivalence classes.\n\n", 
 		   IBDLocEq_TotalSize(igeq), IBDLocEq_NumClasses(igeq));
 	    
+	    O_DECREF(igeq);
+
+	    break;
+
+	case 'E':
+	    if(argc != 3) 
+	    {
+		printf("\nERROR: Incorrect number of arguments for the -e flag.\n");
+		printf("Use the -h or --help flag to see options and usage.\n\n");
+		exit(1);
+	    }
+
+	    // get graph number and specified marker
+	    n_individuals = createIBDGraphs(argv[1], ibd_graphs);
+	    elapsed1 = (double)clock() - start;
+
+	    igeq = NewIBDGraphLocationEquivalences(ibd_graphs);
+
+
+	    elapsed2 = (double)clock() - elapsed1;
+
+	    // IBDGraphLocationEquivalences_Print(igeq);
+	    printf("\n\n{Graphs:%d}{NIndividuals:%ld}{NConfigurations:%ld}{NUnique:%ld}{Time:%f}\n",
+		   Igl_Size(ibd_graphs), n_individuals, 
+		   IBDLocEq_TotalSize(igeq), IBDLocEq_NumClasses(igeq),
+		   (elapsed1 + elapsed2) / CLOCKS_PER_SEC
+		);
+
 	    O_DECREF(igeq);
 
 	    break;
@@ -430,10 +460,10 @@ static inline bool getKeyFromFileStream(HashKey* key, char* name, FILE* fp)
     }
 }
 
-static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
+static long createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 {
 
-    long i, j, k;
+    long i, lines, k;
     long ibd0;
     long ibd1;
     long changes;
@@ -477,7 +507,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
     /* k keeps the while loop going until reach  EOF */
 
     i = 1;
-    j = 1;
+    lines = 0;
     k = 1;
 	
     ibd_graph = NewIBDGraph(i); /* since first run through, no edges in graph */
@@ -491,6 +521,8 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
     while (getKeyFromFileStream(&key, edge, fp) 
 	   && fscanf(fp, "%ld %ld %ld", &ibd0, &ibd1, &changes) == 3)
     {
+	lines ++;
+
 	/* printf("Building graph %d\n", i); */
 	/* printf("Read %s %d %d %d\n", edge, ibd0, ibd1, changes); */
 	cur_range_min = mr_graph_min; // check
@@ -597,7 +629,7 @@ static void createIBDGraphs(char *file, IBDGraphList *ibd_graphs)
 
     fclose(fp);
    
-    return;
+    return (lines / i);
 }
 
 
